@@ -29,7 +29,7 @@ const HDR_MAESTROS = ['Tipo','Valor'];
 const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'];
 const HDR_PROY     = ['ID','Nombre','Inicio','Fin','Dias','Personal','Ciudades','Cuentas KA','Efectividad','Cobertura','Avances','Estado','Obs','Responsable'];
 const HDR_PKPI     = ['Cadena','Cobertura S1','Cobertura S2','Efectividad S1','Efectividad S2','Conectados','Conectados Nota'];
-const HDR_PMAT     = ['ID','Cadena','Categoria','Material','Tiendas','Avance S1','Avance S2','Obs'];
+const HDR_PMAT     = ['ID','Cadena','Categoria','Material','Tiendas','Avance S1','Avance S2','Obs','Inicio','Fin'];
 const HDR_PINC     = ['ID','Cadena','Fecha','Incidencia','Responsable','Estado'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
@@ -186,7 +186,8 @@ function handleGet(e) {
     const shM = ss.getSheetByName(SHEET_PMAT);
     if (shM) shM.getDataRange().getValues().slice(1).filter(r => r[0]).forEach(r => out.materiales.push({
       id: s(r[0]), cadena: s(r[1]), categoria: s(r[2]), material: s(r[3]),
-      tiendas: n(r[4]), avanceS1: n(r[5]), avanceS2: n(r[6]), obs: s(r[7])
+      tiendas: n(r[4]), avanceS1: n(r[5]), avanceS2: n(r[6]), obs: s(r[7]),
+      inicio: d(r[8]), fin: d(r[9])
     }));
     const shI = ss.getSheetByName(SHEET_PINC);
     if (shI) shI.getDataRange().getValues().slice(1).filter(r => r[0]).forEach(r => out.incidencias.push({
@@ -372,7 +373,7 @@ function handlePost(e) {
     const b = body;
     if (!b.cadena || !b.material) return jsonResp({ error: 'Cadena y material requeridos' });
     const id = b.id || ('PM' + new Date().getTime());
-    const row = [id, b.cadena||'', b.categoria||'', b.material||'', num(b.tiendas), num(b.avanceS1), num(b.avanceS2), b.obs||''];
+    const row = [id, b.cadena||'', b.categoria||'', b.material||'', num(b.tiendas), num(b.avanceS1), num(b.avanceS2), b.obs||'', b.inicio||'', b.fin||''];
     const found = findRow(sh, id);
     if (found > 0) sh.getRange(found, 1, 1, HDR_PMAT.length).setValues([row]);
     else sh.appendRow(row);

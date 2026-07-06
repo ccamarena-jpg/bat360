@@ -875,14 +875,15 @@ function renderPromotoria(c){
   <div class="panel">
     <h3>🧱 Materiales a implementar <span class="tag">${esc(cad)}</span><button class="btn sm" style="margin-left:auto" onclick="abrirMaterial('${cad}')">+ Material</button></h3>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Material</th><th>Categoría</th><th class="num">Tiendas</th><th class="num">Avance S1</th><th class="num">Avance S2</th><th class="num">% avance</th><th>Obs</th><th></th></tr></thead>
+      <thead><tr><th>Material</th><th>Categoría</th><th class="num">Tiendas</th><th class="num">Avance S1</th><th class="num">Avance S2</th><th class="num">% avance</th><th>Inicio</th><th>Fin</th><th>Obs</th><th></th></tr></thead>
       <tbody>${mats.length? mats.map(m=>{const av=Math.max(+m.avanceS1||0,+m.avanceS2||0);const p=pct(av,+m.tiendas||0);return `<tr>
         <td><b>${esc(m.material)}</b></td><td>${esc(m.categoria)}</td><td class="num">${m.tiendas||'·'}</td>
         <td class="num">${m.avanceS1||'·'}</td><td class="num">${m.avanceS2||'·'}</td>
         <td class="num ${p>=80?'pos':''}">${m.tiendas?p+'%':'·'}</td>
-        <td style="white-space:normal;max-width:220px">${esc(m.obs)}</td>
+        <td>${m.inicio?fechaLabel(m.inicio):'·'}</td><td>${m.fin?fechaLabel(m.fin):'·'}</td>
+        <td style="white-space:normal;max-width:200px">${esc(m.obs)}</td>
         <td><div class="row-actions"><button class="btn sec sm" onclick='abrirMaterial(${JSON.stringify(cad)},${JSON.stringify(m.id)})'>✎</button><button class="btn danger" onclick='borrarMaterial(${JSON.stringify(m.id)})'>🗑</button></div></td>
-      </tr>`;}).join('') : `<tr><td colspan="8"><div class="empty">Sin materiales. Agrega los materiales a implementar en ${esc(cad)}.</div></td></tr>`}</tbody>
+      </tr>`;}).join('') : `<tr><td colspan="10"><div class="empty">Sin materiales. Agrega los materiales a implementar en ${esc(cad)}.</div></td></tr>`}</tbody>
     </table></div>
   </div>
 
@@ -927,13 +928,16 @@ function abrirMaterial(cad,id){
       <div class="field"><label>Tiendas (cantidad)</label><input type="number" id="mt_td" value="${m.tiendas!=null&&m.tiendas!==''?m.tiendas:''}"></div>
       <div class="field"><label>Avance S1 (tiendas implem.)</label><input type="number" id="mt_a1" value="${m.avanceS1!=null&&m.avanceS1!==''?m.avanceS1:''}"></div>
       <div class="field"><label>Avance S2 (tiendas implem.)</label><input type="number" id="mt_a2" value="${m.avanceS2!=null&&m.avanceS2!==''?m.avanceS2:''}"></div>
+      <div class="field"><label>Fecha inicio</label><input type="date" id="mt_ini" value="${m.inicio||''}"></div>
+      <div class="field"><label>Fecha fin</label><input type="date" id="mt_fin" value="${m.fin||''}"></div>
       <div class="field full"><label>Observación</label><input id="mt_obs" value="${esc(m.obs||'')}"></div>
     </div>
     <div class="modal-actions"><button class="btn sec" onclick="cerrarModal()">Cancelar</button><button class="btn" onclick='guardarMaterial(${JSON.stringify(cad)},${JSON.stringify(id||"")})'>Guardar</button></div>`);
 }
 async function guardarMaterial(cad,id){
   const body={accion:'savePromoMaterial', id:id||'', cadena:cad, categoria:el('mt_cat').value, material:el('mt_mat').value,
-    tiendas:el('mt_td').value||0, avanceS1:el('mt_a1').value||0, avanceS2:el('mt_a2').value||0, obs:el('mt_obs').value};
+    tiendas:el('mt_td').value||0, avanceS1:el('mt_a1').value||0, avanceS2:el('mt_a2').value||0,
+    inicio:el('mt_ini').value, fin:el('mt_fin').value, obs:el('mt_obs').value};
   if(!body.material){ toast('Material requerido',true); return; }
   cerrarModal();
   try{ await apiPost(body); toast('Material guardado'); STATE._promoCad=cad; await cargarTodo(); goView('promotoria'); }catch(e){ toast(e.message,true); }
@@ -960,35 +964,44 @@ async function borrarIncidencia(id){ if(!confirm('¿Borrar esta incidencia?'))re
 
 // ════════ VISTA: CALENDARIO (línea de tiempo de proyectos) ════════
 function renderCalendario(c){
-  const proy=STATE.proyectos.filter(p=>p.inicio&&p.fin).sort((a,b)=>a.inicio<b.inicio?-1:1);
-  if(!proy.length){
-    c.innerHTML=`<div class="panel"><div class="empty"><h3 style="justify-content:center">🗓️ Calendario de proyectos</h3>
-      <p class="muted" style="margin-top:8px">Agrega proyectos con fecha de inicio y fin en <b>Merch → Proyectos actuales</b> y aparecerán aquí como línea de tiempo.</p>
-      <button class="btn" style="margin-top:14px" onclick="STATE._merchTab='proyectos';goView('merch')">Ir a Proyectos</button></div></div>`;
+  const items=[];
+  STATE.proyectos.filter(p=>p.inicio&&p.fin).forEach(p=>items.push({
+    nombre:p.nombre, inicio:p.inicio, fin:p.fin, grupo:p.responsable||'Sin responsable',
+    sub:p.cuentaska, dias:p.dias||diasEntre(p.inicio,p.fin), estado:p.estado,
+    onclick:"STATE._merchTab='proyectos';goView('merch')"}));
+  STATE.promo.materiales.filter(m=>m.inicio&&m.fin).forEach(m=>items.push({
+    nombre:m.material, inicio:m.inicio, fin:m.fin, grupo:'Promotoría · '+(m.cadena||''),
+    sub:m.categoria, dias:diasEntre(m.inicio,m.fin), estado:'',
+    onclick:`STATE._promoCad='${(m.cadena||'').replace(/'/g,"")}';goView('promotoria')`}));
+  if(!items.length){
+    c.innerHTML=`<div class="panel"><div class="empty"><h3 style="justify-content:center">🗓️ Calendario</h3>
+      <p class="muted" style="margin-top:8px">Agrega proyectos (en <b>Merch → Proyectos</b>) o materiales con fecha de inicio y fin (en <b>Promotoría</b>) y aparecerán aquí como línea de tiempo.</p></div></div>`;
     return;
   }
-  const min=proy.reduce((a,p)=>p.inicio<a?p.inicio:a, proy[0].inicio);
-  const max=proy.reduce((a,p)=>p.fin>a?p.fin:a, proy[0].fin);
+  const min=items.reduce((a,it)=>it.inicio<a?it.inicio:a, items[0].inicio);
+  const max=items.reduce((a,it)=>it.fin>a?it.fin:a, items[0].fin);
   const meses=[]; let d=new Date(min.slice(0,7)+'-01T00:00:00'); const end=new Date(max.slice(0,7)+'-01T00:00:00');
   while(d<=end && meses.length<60){ meses.push((d.getMonth()+1)+'/'+d.getFullYear()); d.setMonth(d.getMonth()+1); }
   const startDt=new Date(min.slice(0,7)+'-01T00:00:00');
   const endDt=new Date(max.slice(0,7)+'-01T00:00:00'); endDt.setMonth(endDt.getMonth()+1);
   const span=endDt-startDt || 1;
   const pos=ds=>Math.max(0,Math.min(100, (new Date(ds+'T00:00:00')-startDt)/span*100));
-  const hoy=new Date(); const hoyPct=(hoy>=startDt&&hoy<=endDt)?((hoy-startDt)/span*100):null;
+  const hoy=new Date(); const hoyPct=(hoy>=startDt&&hoy<=endDt)?((hoy-startDt)/span*100):null; const hoyIso=hoy.toISOString().slice(0,10);
   const PALETA=['#1d3b78','#f4b500','#2b9e5b','#d6453d','#7c3aed','#0891b2','#db2777','#ea580c','#0d9488','#9333ea'];
-  const resps=[...new Set(proy.map(p=>p.responsable||'Sin responsable'))];
-  const colorFor=r=>PALETA[Math.max(0,resps.indexOf(r||'Sin responsable'))%PALETA.length];
-  const grupos={}; resps.forEach(r=>grupos[r]=[]); proy.forEach(p=>grupos[p.responsable||'Sin responsable'].push(p));
+  const gruposList=[...new Set(items.map(it=>it.grupo))];
+  const colorFor=g=>PALETA[Math.max(0,gruposList.indexOf(g))%PALETA.length];
+  const grupos={}; gruposList.forEach(g=>grupos[g]=[]); items.forEach(it=>grupos[it.grupo].push(it));
+  const nProy=STATE.proyectos.filter(p=>p.inicio&&p.fin).length, nMat=STATE.promo.materiales.filter(m=>m.inicio&&m.fin).length;
 
   c.innerHTML=`
   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-    <div class="kpi"><div class="lbl">Proyectos en línea</div><div class="val">${proy.length}</div><div class="hint">${resps.length} responsable(s)</div></div>
+    <div class="kpi"><div class="lbl">Ítems en línea</div><div class="val">${items.length}</div><div class="hint">${nProy} proyectos · ${nMat} materiales</div></div>
     <div class="kpi"><div class="lbl">Rango</div><div class="val" style="font-size:16px">${fechaLabel(min)} → ${fechaLabel(max)}</div></div>
-    <div class="kpi"><div class="lbl">Activos hoy</div><div class="val pos">${proy.filter(p=>p.inicio<=hoy.toISOString().slice(0,10)&&p.fin>=hoy.toISOString().slice(0,10)).length}</div></div>
+    <div class="kpi"><div class="lbl">Activos hoy</div><div class="val pos">${items.filter(it=>it.inicio<=hoyIso&&it.fin>=hoyIso).length}</div></div>
+    <div class="kpi"><div class="lbl">Grupos</div><div class="val">${gruposList.length}</div></div>
   </div>
   <div class="panel">
-    <h3>🗓️ Línea de tiempo de proyectos</h3>
+    <h3>🗓️ Línea de tiempo <span class="tag">proyectos por responsable + materiales por cadena</span></h3>
     <div style="overflow-x:auto">
       <div style="min-width:${Math.max(600,meses.length*90)}px">
         <div style="display:flex;border-bottom:1px solid var(--line);margin-bottom:8px;padding-left:200px">
@@ -996,24 +1009,24 @@ function renderCalendario(c){
         </div>
         <div style="position:relative">
           ${hoyPct!=null?`<div style="position:absolute;left:calc(200px + (100% - 200px) * ${hoyPct/100});top:0;bottom:0;width:2px;background:var(--bad);z-index:2" title="Hoy"></div>`:''}
-          ${resps.map(r=>`
+          ${gruposList.map(g=>`
             <div style="display:flex;align-items:center;height:24px;margin-top:8px">
-              <div style="width:200px;font-size:11px;font-weight:700;color:${colorFor(r)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                <span style="display:inline-block;width:9px;height:9px;background:${colorFor(r)};border-radius:2px;margin-right:6px"></span>${esc(r)}</div>
+              <div style="width:200px;font-size:11px;font-weight:700;color:${colorFor(g)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                <span style="display:inline-block;width:9px;height:9px;background:${colorFor(g)};border-radius:2px;margin-right:6px"></span>${esc(g)}</div>
               <div style="flex:1;border-bottom:1px dashed var(--line)"></div>
             </div>
-            ${grupos[r].map(p=>{const l=pos(p.inicio), w=Math.max(1.5,pos(p.fin)-pos(p.inicio)); const cer=p.estado==='Cerrado';return `
+            ${grupos[g].map(it=>{const l=pos(it.inicio), w=Math.max(1.5,pos(it.fin)-pos(it.inicio)); const cer=it.estado==='Cerrado';return `
             <div style="display:flex;align-items:center;height:32px">
-              <div style="width:200px;padding-left:15px;padding-right:10px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
+              <div style="width:200px;padding-left:15px;padding-right:10px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(it.nombre)}">${esc(it.nombre)}</div>
               <div style="position:relative;flex:1;height:100%">
-                <div title="${esc(p.nombre)} · ${fechaLabel(p.inicio)}→${fechaLabel(p.fin)} · ${esc(p.cuentaska||'')} · ${esc(p.estado||'')}"
-                  style="position:absolute;left:${l}%;width:${w}%;top:6px;height:20px;background:${colorFor(r)};opacity:${cer?0.45:1};border-radius:5px;display:flex;align-items:center;padding:0 8px;color:#fff;font-size:10.5px;white-space:nowrap;overflow:hidden;cursor:pointer" onclick="STATE._merchTab='proyectos';goView('merch')">${p.dias||diasEntre(p.inicio,p.fin)}d${p.cuentaska?' · '+esc(p.cuentaska):''}</div>
+                <div title="${esc(it.nombre)} · ${fechaLabel(it.inicio)}→${fechaLabel(it.fin)}${it.sub?' · '+esc(it.sub):''}${it.estado?' · '+esc(it.estado):''}"
+                  style="position:absolute;left:${l}%;width:${w}%;top:6px;height:20px;background:${colorFor(g)};opacity:${cer?0.45:1};border-radius:5px;display:flex;align-items:center;padding:0 8px;color:#fff;font-size:10.5px;white-space:nowrap;overflow:hidden;cursor:pointer" onclick="${it.onclick}">${it.dias}d${it.sub?' · '+esc(it.sub):''}</div>
               </div>
             </div>`;}).join('')}
           `).join('')}
         </div>
         <div style="margin-top:12px;font-size:11px;color:var(--muted);padding-left:200px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-          ${resps.map(r=>`<span><span style="display:inline-block;width:10px;height:10px;background:${colorFor(r)};border-radius:2px;margin-right:4px"></span>${esc(r)}</span>`).join('')}
+          ${gruposList.map(g=>`<span><span style="display:inline-block;width:10px;height:10px;background:${colorFor(g)};border-radius:2px;margin-right:4px"></span>${esc(g)}</span>`).join('')}
           <span>· barra tenue = cerrado · <span style="color:var(--bad)">▏</span> hoy</span>
         </div>
       </div>
