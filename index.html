@@ -130,7 +130,7 @@
       <a data-view="margen"><span class="ico">📈</span> Margen por servicio</a>
       <div class="sec">Operaciones</div>
       <a class="soon"><span class="ico">🛒</span> Promotoría</a>
-      <a class="soon"><span class="ico">📦</span> Merch</a>
+      <a data-view="merch"><span class="ico">📦</span> Merch</a>
       <a class="soon"><span class="ico">🗓️</span> Calendario</a>
       <div class="sec">Sistema</div>
       <a data-view="config"><span class="ico">⚙️</span> Configuración</a>
@@ -167,7 +167,7 @@ const CLAVE = 'BAT360';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnfh98OMw0mVuBIF02OUPrWmCpcyrH7tOaOmtFSY1dmJtxreoiMWudJ1tPiZYS8NgAvA/exec';
 const STATE = {
   url: localStorage.getItem('bat_url') || GAS_URL,
-  fact: [], gastos: [], maestros: {},
+  fact: [], gastos: [], merch: [], maestros: {},
   view: 'resumen',
 };
 
@@ -206,11 +206,11 @@ async function cargarTodo(){
   if(!STATE.url){ setConn(false,'Sin configurar'); render(); return; }
   setConn(false,'Cargando…');
   try{
-    const [f,g,m] = await Promise.all([
-      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMaestros')
+    const [f,g,me,m] = await Promise.all([
+      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getMaestros')
     ]);
-    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.maestros = m.maestros||{};
-    setConn(true, `${STATE.fact.length} facturas · ${STATE.gastos.length} gastos`);
+    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.maestros = m.maestros||{};
+    setConn(true, `${STATE.fact.length} facturas · ${STATE.gastos.length} gastos · ${STATE.merch.length} merch`);
     render();
   }catch(e){ setConn(false,'Error'); toast(e.message,true); render(); }
 }
@@ -222,6 +222,7 @@ const TITLES = {
   facturacion:['Facturación','Facturas por cliente y servicio'],
   gastos:['Gastos','Costos por servicio para el margen'],
   margen:['Margen por servicio','Facturación − Gastos = Margen'],
+  merch:['Merch','Seguimiento semanal de OTs — programadas y por programar'],
   config:['Configuración','Conexión con Google Sheets'],
 };
 document.getElementById('nav').addEventListener('click',e=>{
@@ -249,6 +250,7 @@ function render(){
   else if(STATE.view==='facturacion') renderFacturacion(c);
   else if(STATE.view==='gastos') renderGastos(c);
   else if(STATE.view==='margen') renderMargen(c);
+  else if(STATE.view==='merch') renderMerch(c);
   else if(STATE.view==='config') renderConfig(c);
 }
 function goView(v){ document.querySelector(`.nav a[data-view="${v}"]`).click(); }
@@ -573,6 +575,133 @@ function renderMargen(c){
   </div>`;
 }
 
+// ════════ VISTA: MERCH ════════
+function semLabel(s){ if(!s) return '—'; const p=(''+s).split('-'); if(p.length<3) return s; return (+p[2])+' '+MESES[(+p[1])-1]; }
+
+function renderMerch(c){
+  if(!STATE.merch.length){
+    c.innerHTML=`<div class="filters">
+      <button class="btn" onclick="abrirCarga('merch')">⬆ Cargar consolidado</button>
+      <button class="btn sec" onclick="abrirMerch()">+ Nuevo registro</button></div>
+      <div class="panel"><div class="empty"><h3 style="justify-content:center">📦 Sin data de merch todavía</h3>
+      <p class="muted" style="margin-top:8px">Usa <b>Cargar consolidado</b> para subir tu matriz semanal de OTs (programadas y por programar).</p></div></div>`;
+    return;
+  }
+  STATE._meFil = STATE._meFil || {metric:'porprogramar'};
+  const f=STATE._meFil;
+  const opt=(arr,sel)=>['<option value="">Todas</option>'].concat(arr.map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`)).join('');
+  const cadenasAll=[...new Set(STATE.merch.map(r=>r.cadena))].filter(Boolean).sort();
+  const zonasAll=[...new Set(STATE.merch.map(r=>r.zona))].filter(Boolean).sort();
+  const tiposAll=[...new Set(STATE.merch.map(r=>r.tipo))].filter(Boolean).sort();
+  const sem=[...new Set(STATE.merch.map(r=>r.semana))].filter(Boolean).sort();
+  const ultima=sem[sem.length-1];
+  const metric=f.metric||'porprogramar';
+
+  const rows=STATE.merch.filter(r=>(!f.cadena||r.cadena===f.cadena)&&(!f.zona||r.zona===f.zona)&&(!f.tipo||r.tipo===f.tipo));
+
+  // KPIs (última semana)
+  const ult=rows.filter(r=>r.semana===ultima);
+  const uProg=ult.reduce((a,b)=>a+(+b.programado||0),0);
+  const uPorp=ult.reduce((a,b)=>a+(+b.porprogramar||0),0);
+  const cadPend=new Set(ult.filter(r=>+r.porprogramar>0).map(r=>r.cadena)).size;
+  const avance=(uProg+uPorp)?(uProg/(uProg+uPorp)*100):0;
+
+  // pivot cadena x semana (métrica elegida)
+  const piv={}; cadenasAll.forEach(cd=>piv[cd]={});
+  rows.forEach(r=>{ if(piv[r.cadena]) piv[r.cadena][r.semana]=(piv[r.cadena][r.semana]||0)+(+r[metric]||0); });
+  const cadRows=cadenasAll.filter(cd=> sem.some(s=>piv[cd][s]));
+  const natt={}; sem.forEach(s=>{ natt[s]=rows.filter(r=>r.semana===s).reduce((a,b)=>a+(+b[metric]||0),0); });
+  const cellStyle=(v)=> (metric==='porprogramar'&&v>0)?'color:var(--warn);font-weight:600':(v>0?'color:var(--brand);font-weight:600':'color:var(--muted)');
+
+  // detalle pendientes
+  const detSem=f.detSem||ultima;
+  const pend=rows.filter(r=>r.semana===detSem && +r.porprogramar>0).sort((a,b)=>(+b.porprogramar)-(+a.porprogramar));
+
+  c.innerHTML=`
+  <div class="filters">
+    <div class="field"><label>Cadena</label><select onchange="setMeFil('cadena',this.value)">${opt(cadenasAll,f.cadena)}</select></div>
+    <div class="field"><label>Zona</label><select onchange="setMeFil('zona',this.value)">${opt(zonasAll,f.zona)}</select></div>
+    <div class="field"><label>Tipo de OT</label><select onchange="setMeFil('tipo',this.value)">${opt(tiposAll,f.tipo)}</select></div>
+    <div class="field"><label>Métrica del cuadro</label><select onchange="setMeFil('metric',this.value)">
+      <option value="porprogramar" ${metric==='porprogramar'?'selected':''}>Por programar</option>
+      <option value="programado" ${metric==='programado'?'selected':''}>Programado</option></select></div>
+    <button class="btn sec" onclick="abrirCarga('merch')">⬆ Cargar consolidado</button>
+    <button class="btn" onclick="abrirMerch()">+ Registro</button>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">Por programar · ${semLabel(ultima)}</div><div class="val" style="color:var(--warn)">${uPorp}</div><div class="hint">pendientes (backlog)</div></div>
+    <div class="kpi"><div class="lbl">Programado · ${semLabel(ultima)}</div><div class="val">${uProg}</div><div class="hint">OTs programadas</div></div>
+    <div class="kpi"><div class="lbl">Avance</div><div class="val ${avance>=50?'pos':''}">${avance.toFixed(0)}%</div><div class="hint">prog ÷ (prog+pendiente)</div></div>
+    <div class="kpi"><div class="lbl">Cadenas con pendientes</div><div class="val">${cadPend}</div><div class="hint">${sem.length} semanas registradas</div></div>
+  </div>
+
+  <div class="panel">
+    <h3>📦 ${metric==='porprogramar'?'Por programar':'Programado'} por cadena y semana <span class="tag">nacional${f.zona?' · '+esc(f.zona):''}${f.tipo?' · '+esc(f.tipo):''}</span></h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Cadena</th>${sem.map(s=>`<th class="num" title="${s}">${semLabel(s)}</th>`).join('')}<th class="num">Total</th></tr></thead>
+      <tbody>${cadRows.map(cd=>{const tot=sem.reduce((a,s)=>a+(piv[cd][s]||0),0);
+        return `<tr><td><b>${esc(cd)}</b></td>${sem.map(s=>{const v=piv[cd][s]||0;return `<td class="num" style="${cellStyle(v)}">${v||'·'}</td>`}).join('')}<td class="num" style="font-weight:700">${tot}</td></tr>`;}).join('')}
+        <tr style="border-top:2px solid var(--line)"><td style="font-weight:700">🇵🇪 Nacional</td>${sem.map(s=>`<td class="num" style="font-weight:700">${natt[s]||'·'}</td>`).join('')}<td class="num" style="font-weight:800">${sem.reduce((a,s)=>a+(natt[s]||0),0)}</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+
+  <div class="panel">
+    <h3>🔔 Pendientes por programar
+      <span class="tag">semana:</span>
+      <select onchange="setMeFil('detSem',this.value)" style="font-size:12px;padding:4px 8px">${sem.slice().reverse().map(s=>`<option value="${s}" ${s===detSem?'selected':''}>${semLabel(s)} (${s.slice(0,4)})</option>`).join('')}</select>
+    </h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Cadena</th><th>Zona</th><th>Tipo de OT</th><th class="num">Por programar</th><th class="num">Programado</th><th>Obs</th><th></th></tr></thead>
+      <tbody>${pend.length? pend.map(r=>`<tr>
+        <td><b>${esc(r.cadena)}</b></td><td>${esc(r.zona)}</td><td>${esc(r.tipo)}</td>
+        <td class="num" style="color:var(--warn);font-weight:700">${r.porprogramar}</td><td class="num">${r.programado}</td>
+        <td style="white-space:normal;max-width:320px">${esc(r.obs)}</td>
+        <td><div class="row-actions"><button class="btn sec sm" onclick='abrirMerch(${JSON.stringify(r.id)})'>✎</button><button class="btn danger" onclick='borrarMerch(${JSON.stringify(r.id)})'>🗑</button></div></td>
+      </tr>`).join('') : `<tr><td colspan="7"><div class="empty">Sin pendientes por programar en ${semLabel(detSem)} 🎉</div></td></tr>`}</tbody>
+    </table></div>
+    <p class="muted" style="margin-top:10px;font-size:11.5px">Total por programar en ${semLabel(detSem)}: <b>${pend.reduce((a,b)=>a+(+b.porprogramar||0),0)}</b> OTs en ${pend.length} líneas.</p>
+  </div>`;
+}
+function setMeFil(k,v){ STATE._meFil[k]=v; renderMerch(el('content')); }
+
+function abrirMerch(id){
+  const r=id? STATE.merch.find(x=>x.id===id):{};
+  const sel=(arr,v)=>['<option value=""></option>'].concat((arr||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`)).join('');
+  const cadenasAll=[...new Set(STATE.merch.map(x=>x.cadena))].filter(Boolean).sort();
+  const zonasAll=[...new Set(STATE.merch.map(x=>x.zona))].filter(Boolean).sort();
+  const tiposAll=[...new Set(STATE.merch.map(x=>x.tipo))].filter(Boolean).sort();
+  showModal(`
+    <h3>${id?'Editar':'Nuevo'} registro merch</h3>
+    <div class="grid2">
+      <div class="field"><label>Semana</label><input type="date" id="me_sem" value="${r.semana||''}"></div>
+      <div class="field"><label>Cadena</label><select id="me_cad">${sel(cadenasAll,r.cadena)}</select></div>
+      <div class="field"><label>Zona</label><select id="me_zona">${sel(zonasAll,r.zona)}</select></div>
+      <div class="field"><label>Tipo de OT</label><select id="me_tipo">${sel(tiposAll,r.tipo)}</select></div>
+      <div class="field"><label>Programado</label><input type="number" id="me_prog" value="${r.programado!=null?r.programado:''}"></div>
+      <div class="field"><label>Por programar</label><input type="number" id="me_porp" value="${r.porprogramar!=null?r.porprogramar:''}"></div>
+      <div class="field full"><label>Observación</label><input id="me_obs" value="${esc(r.obs||'')}"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn sec" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" onclick='guardarMerch(${JSON.stringify(id||"")})'>Guardar</button>
+    </div>`);
+}
+async function guardarMerch(id){
+  const body={accion:'saveMerch', id:id||'', semana:el('me_sem').value, cadena:el('me_cad').value,
+    zona:el('me_zona').value, tipo:el('me_tipo').value, programado:el('me_prog').value||0,
+    porprogramar:el('me_porp').value||0, obs:el('me_obs').value};
+  if(!body.semana||!body.cadena){ toast('Semana y cadena requeridos',true); return; }
+  cerrarModal();
+  try{ await apiPost(body); toast('Registro guardado'); await cargarTodo(); goView('merch'); }
+  catch(e){ toast(e.message,true); }
+}
+async function borrarMerch(id){
+  if(!confirm('¿Borrar este registro?')) return;
+  try{ await apiPost({accion:'deleteMerch',id}); toast('Registro borrado'); await cargarTodo(); goView('merch'); }
+  catch(e){ toast(e.message,true); }
+}
+
 // ════════ VISTA: CONFIG ════════
 function renderConfig(c){
   c.innerHTML=`
@@ -619,6 +748,14 @@ const PLANTILLAS = {
     accion:'saveGastoBulk',
     map:o=>({cliente:o['Cliente'],tipo:o['Servicio'],mes:normMes(o['Mes']),grupo:(o['Grupo']||'Otros'),categoria:o['Categoria'],monto:parseMonto(o['Monto']),detalle:o['Detalle']}),
     valid:r=>r.cliente&&r.tipo&&r.mes,
+  },
+  merch: {
+    nombre:'OTs merch',
+    headers:['Semana','Tipo','Zona','Cadena','Programado','Por Programar','Obs'],
+    ejemplo:['2026-06-22','OTS MANTENIMIENTO','LIMA','TAMBO','5','12','Cambio de cigarreras'],
+    accion:'saveMerchBulk',
+    map:o=>({semana:normFecha(o['Semana']),tipo:o['Tipo'],zona:o['Zona'],cadena:o['Cadena'],programado:Math.round(parseMonto(o['Programado'])),porprogramar:Math.round(parseMonto(o['Por Programar'])),obs:o['Obs']}),
+    valid:r=>r.semana&&r.cadena,
   }
 };
 function parseCSV(t,delim){
@@ -709,13 +846,17 @@ function procesarArchivo(tipo,input){
   reader.readAsText(file,'UTF-8');
 }
 function tablaPreview(tipo,rows){
-  const head = tipo==='fact'
-    ? '<th>Cliente</th><th>Servicio</th><th>Mes</th><th class="num">Importe</th>'
-    : '<th>Cliente</th><th>Servicio</th><th>Mes</th><th>Grupo</th><th class="num">Monto</th>';
-  const body = rows.map(r=> tipo==='fact'
-    ? `<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td class="num">${money(r.importe)}</td></tr>`
-    : `<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td>${esc(r.grupo)}</td><td class="num">${money(r.monto)}</td></tr>`
-  ).join('');
+  let head, body;
+  if(tipo==='fact'){
+    head='<th>Cliente</th><th>Servicio</th><th>Mes</th><th class="num">Importe</th>';
+    body=rows.map(r=>`<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td class="num">${money(r.importe)}</td></tr>`).join('');
+  } else if(tipo==='gasto'){
+    head='<th>Cliente</th><th>Servicio</th><th>Mes</th><th>Grupo</th><th class="num">Monto</th>';
+    body=rows.map(r=>`<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td>${esc(r.grupo)}</td><td class="num">${money(r.monto)}</td></tr>`).join('');
+  } else {
+    head='<th>Semana</th><th>Cadena</th><th>Zona</th><th class="num">Prog.</th><th class="num">Por prog.</th>';
+    body=rows.map(r=>`<tr><td>${esc(semLabel(r.semana))}</td><td>${esc(r.cadena)}</td><td>${esc(r.zona)}</td><td class="num">${r.programado}</td><td class="num">${r.porprogramar}</td></tr>`).join('');
+  }
   return `<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
     <p class="muted" style="font-size:11px;margin-top:6px">Vista previa de las primeras filas.</p>`;
 }
@@ -726,7 +867,7 @@ async function confirmarCarga(tipo){
   try{
     const r=await apiPost({accion:P.accion, rows});
     cerrarModal(); toast(`${(r&&r.added)||rows.length} ${P.nombre} cargados ✓`);
-    await cargarTodo(); goView(tipo==='fact'?'facturacion':'gastos');
+    await cargarTodo(); goView(tipo==='fact'?'facturacion':(tipo==='gasto'?'gastos':'merch'));
   }catch(e){ toast(e.message,true); btn.disabled=false; btn.textContent=`Cargar ${rows.length} ${P.nombre}`; }
 }
 

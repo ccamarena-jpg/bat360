@@ -15,12 +15,14 @@
 const SHEET_FACT     = 'Facturacion';
 const SHEET_GASTOS   = 'Gastos';
 const SHEET_MAESTROS = 'Maestros';
+const SHEET_MERCH    = 'Merch';
 
 const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
   'Servicio / Proyecto','Mes','Importe','OS','Serie Factura','# Factura',
   'Fecha Factura','Fecha Vencimiento','Estado','Estado Detalle'];
 const HDR_GASTOS   = ['ID','Cliente','Tipo de SS','Mes','Grupo','Categoria','Monto','Detalle'];
 const HDR_MAESTROS = ['Tipo','Valor'];
+const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Obs'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
 function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -43,6 +45,7 @@ function initSheets() {
   const ss = getSS();
   getOrCreate(ss, SHEET_FACT,     HDR_FACT);
   getOrCreate(ss, SHEET_GASTOS,   HDR_GASTOS);
+  getOrCreate(ss, SHEET_MERCH,    HDR_MERCH);
   const shM = getOrCreate(ss, SHEET_MAESTROS, HDR_MAESTROS);
 
   // Sembrar catálogos solo si está vacío
@@ -116,6 +119,23 @@ function handleGet(e) {
       categoria: s(r[5]),
       monto:     n(r[6]),
       detalle:   s(r[7]),
+    }));
+    return jsonResp({ rows, count: rows.length });
+  }
+
+  if (accion === 'getMerch') {
+    const sh = ss.getSheetByName(SHEET_MERCH);
+    if (!sh) return jsonResp({ rows: [], count: 0 });
+    const data = sh.getDataRange().getValues();
+    const rows = data.slice(1).filter(r => r[0]).map(r => ({
+      id:           s(r[0]),
+      semana:       d(r[1]),
+      tipo:         s(r[2]),
+      zona:         s(r[3]),
+      cadena:       s(r[4]),
+      programado:   n(r[5]),
+      porprogramar: n(r[6]),
+      obs:          s(r[7]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -220,6 +240,40 @@ function handlePost(e) {
       b.categoria||'', num(b.monto), b.detalle||''
     ]);
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_GASTOS.length).setValues(rows);
+    return jsonResp({ ok: true, added: rows.length });
+  }
+
+  // ── MERCH ──────────────────────────────────────────────────────
+  if (accion === 'saveMerch') {
+    const sh = getOrCreate(ss, SHEET_MERCH, HDR_MERCH);
+    const b = body;
+    if (!b.cadena || !b.semana) return jsonResp({ error: 'Cadena y semana requeridos' });
+    const id = b.id || ('M' + new Date().getTime());
+    const row = [id, b.semana||'', b.tipo||'', b.zona||'', b.cadena||'',
+      num(b.programado), num(b.porprogramar), b.obs||''];
+    const found = findRow(sh, id);
+    if (found > 0) sh.getRange(found, 1, 1, HDR_MERCH.length).setValues([row]);
+    else sh.appendRow(row);
+    return jsonResp({ ok: true, id: id, action: found > 0 ? 'updated' : 'created' });
+  }
+
+  if (accion === 'deleteMerch') {
+    const sh = ss.getSheetByName(SHEET_MERCH);
+    const found = findRow(sh, body.id);
+    if (found > 0) { sh.deleteRow(found); return jsonResp({ ok: true, action: 'deleted' }); }
+    return jsonResp({ ok: false, error: 'ID no encontrado' });
+  }
+
+  if (accion === 'saveMerchBulk') {
+    const sh = getOrCreate(ss, SHEET_MERCH, HDR_MERCH);
+    const items = body.rows || [];
+    if (!items.length) return jsonResp({ error: 'Sin filas para cargar' });
+    const base = new Date().getTime();
+    const rows = items.map((b, i) => [
+      b.id || ('M' + (base + i)), b.semana||'', b.tipo||'', b.zona||'', b.cadena||'',
+      num(b.programado), num(b.porprogramar), b.obs||''
+    ]);
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_MERCH.length).setValues(rows);
     return jsonResp({ ok: true, added: rows.length });
   }
 
