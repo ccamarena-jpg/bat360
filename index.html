@@ -603,15 +603,19 @@ function renderMerch(c){
   const ult=rows.filter(r=>r.semana===ultima);
   const uProg=ult.reduce((a,b)=>a+(+b.programado||0),0);
   const uPorp=ult.reduce((a,b)=>a+(+b.porprogramar||0),0);
+  const uEfec=ult.reduce((a,b)=>a+(+b.efectivo||0),0);
   const cadPend=new Set(ult.filter(r=>+r.porprogramar>0).map(r=>r.cadena)).size;
-  const avance=(uProg+uPorp)?(uProg/(uProg+uPorp)*100):0;
+  const cumpl=uProg?(uEfec/uProg*100):0;
 
   // pivot cadena x semana (métrica elegida)
   const piv={}; cadenasAll.forEach(cd=>piv[cd]={});
   rows.forEach(r=>{ if(piv[r.cadena]) piv[r.cadena][r.semana]=(piv[r.cadena][r.semana]||0)+(+r[metric]||0); });
   const cadRows=cadenasAll.filter(cd=> sem.some(s=>piv[cd][s]));
   const natt={}; sem.forEach(s=>{ natt[s]=rows.filter(r=>r.semana===s).reduce((a,b)=>a+(+b[metric]||0),0); });
-  const cellStyle=(v)=> (metric==='porprogramar'&&v>0)?'color:var(--warn);font-weight:600':(v>0?'color:var(--brand);font-weight:600':'color:var(--muted)');
+  const cellStyle=(v)=>{ if(!v) return 'color:var(--muted)';
+    if(metric==='porprogramar') return 'color:var(--warn);font-weight:600';
+    if(metric==='efectivo') return 'color:var(--good);font-weight:600';
+    return 'color:var(--brand);font-weight:600'; };
 
   // detalle pendientes
   const detSem=f.detSem||ultima;
@@ -624,15 +628,16 @@ function renderMerch(c){
     <div class="field"><label>Tipo de OT</label><select onchange="setMeFil('tipo',this.value)">${opt(tiposAll,f.tipo)}</select></div>
     <div class="field"><label>Métrica del cuadro</label><select onchange="setMeFil('metric',this.value)">
       <option value="porprogramar" ${metric==='porprogramar'?'selected':''}>Por programar</option>
-      <option value="programado" ${metric==='programado'?'selected':''}>Programado</option></select></div>
+      <option value="programado" ${metric==='programado'?'selected':''}>Programado</option>
+      <option value="efectivo" ${metric==='efectivo'?'selected':''}>Efectivo</option></select></div>
     <button class="btn sec" onclick="abrirCarga('merch')">⬆ Cargar consolidado</button>
     <button class="btn" onclick="abrirMerch()">+ Registro</button>
   </div>
   <div class="kpis">
     <div class="kpi"><div class="lbl">Por programar · ${semLabel(ultima)}</div><div class="val" style="color:var(--warn)">${uPorp}</div><div class="hint">pendientes (backlog)</div></div>
     <div class="kpi"><div class="lbl">Programado · ${semLabel(ultima)}</div><div class="val">${uProg}</div><div class="hint">OTs programadas</div></div>
-    <div class="kpi"><div class="lbl">Avance</div><div class="val ${avance>=50?'pos':''}">${avance.toFixed(0)}%</div><div class="hint">prog ÷ (prog+pendiente)</div></div>
-    <div class="kpi"><div class="lbl">Cadenas con pendientes</div><div class="val">${cadPend}</div><div class="hint">${sem.length} semanas registradas</div></div>
+    <div class="kpi"><div class="lbl">Efectivo · ${semLabel(ultima)}</div><div class="val pos">${uEfec}</div><div class="hint">OTs completadas</div></div>
+    <div class="kpi"><div class="lbl">Cumplimiento</div><div class="val ${cumpl>=80?'pos':(cumpl>=50?'':'neg')}">${cumpl.toFixed(0)}%</div><div class="hint">efectivo ÷ programado · ${cadPend} cadenas c/ pendientes</div></div>
   </div>
 
   <div class="panel">
@@ -652,13 +657,14 @@ function renderMerch(c){
       <select onchange="setMeFil('detSem',this.value)" style="font-size:12px;padding:4px 8px">${sem.slice().reverse().map(s=>`<option value="${s}" ${s===detSem?'selected':''}>${semLabel(s)} (${s.slice(0,4)})</option>`).join('')}</select>
     </h3>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Cadena</th><th>Zona</th><th>Tipo de OT</th><th class="num">Por programar</th><th class="num">Programado</th><th>Obs</th><th></th></tr></thead>
+      <thead><tr><th>Cadena</th><th>Zona</th><th>Tipo de OT</th><th class="num">Por programar</th><th class="num">Programado</th><th class="num">Efectivo</th><th>Obs</th><th></th></tr></thead>
       <tbody>${pend.length? pend.map(r=>`<tr>
         <td><b>${esc(r.cadena)}</b></td><td>${esc(r.zona)}</td><td>${esc(r.tipo)}</td>
         <td class="num" style="color:var(--warn);font-weight:700">${r.porprogramar}</td><td class="num">${r.programado}</td>
+        <td class="num" style="color:var(--good)">${r.efectivo||'·'}</td>
         <td style="white-space:normal;max-width:320px">${esc(r.obs)}</td>
         <td><div class="row-actions"><button class="btn sec sm" onclick='abrirMerch(${JSON.stringify(r.id)})'>✎</button><button class="btn danger" onclick='borrarMerch(${JSON.stringify(r.id)})'>🗑</button></div></td>
-      </tr>`).join('') : `<tr><td colspan="7"><div class="empty">Sin pendientes por programar en ${semLabel(detSem)} 🎉</div></td></tr>`}</tbody>
+      </tr>`).join('') : `<tr><td colspan="8"><div class="empty">Sin pendientes por programar en ${semLabel(detSem)} 🎉</div></td></tr>`}</tbody>
     </table></div>
     <p class="muted" style="margin-top:10px;font-size:11.5px">Total por programar en ${semLabel(detSem)}: <b>${pend.reduce((a,b)=>a+(+b.porprogramar||0),0)}</b> OTs en ${pend.length} líneas.</p>
   </div>`;
@@ -680,6 +686,7 @@ function abrirMerch(id){
       <div class="field"><label>Tipo de OT</label><select id="me_tipo">${sel(tiposAll,r.tipo)}</select></div>
       <div class="field"><label>Programado</label><input type="number" id="me_prog" value="${r.programado!=null?r.programado:''}"></div>
       <div class="field"><label>Por programar</label><input type="number" id="me_porp" value="${r.porprogramar!=null?r.porprogramar:''}"></div>
+      <div class="field"><label>Efectivo (completadas)</label><input type="number" id="me_efec" value="${r.efectivo!=null?r.efectivo:''}"></div>
       <div class="field full"><label>Observación</label><input id="me_obs" value="${esc(r.obs||'')}"></div>
     </div>
     <div class="modal-actions">
@@ -690,7 +697,7 @@ function abrirMerch(id){
 async function guardarMerch(id){
   const body={accion:'saveMerch', id:id||'', semana:el('me_sem').value, cadena:el('me_cad').value,
     zona:el('me_zona').value, tipo:el('me_tipo').value, programado:el('me_prog').value||0,
-    porprogramar:el('me_porp').value||0, obs:el('me_obs').value};
+    porprogramar:el('me_porp').value||0, efectivo:el('me_efec').value||0, obs:el('me_obs').value};
   if(!body.semana||!body.cadena){ toast('Semana y cadena requeridos',true); return; }
   cerrarModal();
   try{ await apiPost(body); toast('Registro guardado'); await cargarTodo(); goView('merch'); }
@@ -751,10 +758,10 @@ const PLANTILLAS = {
   },
   merch: {
     nombre:'OTs merch',
-    headers:['Semana','Tipo','Zona','Cadena','Programado','Por Programar','Obs'],
-    ejemplo:['2026-06-22','OTS MANTENIMIENTO','LIMA','TAMBO','5','12','Cambio de cigarreras'],
+    headers:['Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'],
+    ejemplo:['2026-06-22','OTS MANTENIMIENTO','LIMA','TAMBO','5','12','3','Cambio de cigarreras'],
     accion:'saveMerchBulk',
-    map:o=>({semana:normFecha(o['Semana']),tipo:o['Tipo'],zona:o['Zona'],cadena:o['Cadena'],programado:Math.round(parseMonto(o['Programado'])),porprogramar:Math.round(parseMonto(o['Por Programar'])),obs:o['Obs']}),
+    map:o=>({semana:normFecha(o['Semana']),tipo:o['Tipo'],zona:o['Zona'],cadena:o['Cadena'],programado:Math.round(parseMonto(o['Programado'])),porprogramar:Math.round(parseMonto(o['Por Programar'])),efectivo:Math.round(parseMonto(o['Efectivo'])),obs:o['Obs']}),
     valid:r=>r.semana&&r.cadena,
   }
 };
@@ -854,8 +861,8 @@ function tablaPreview(tipo,rows){
     head='<th>Cliente</th><th>Servicio</th><th>Mes</th><th>Grupo</th><th class="num">Monto</th>';
     body=rows.map(r=>`<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td>${esc(r.grupo)}</td><td class="num">${money(r.monto)}</td></tr>`).join('');
   } else {
-    head='<th>Semana</th><th>Cadena</th><th>Zona</th><th class="num">Prog.</th><th class="num">Por prog.</th>';
-    body=rows.map(r=>`<tr><td>${esc(semLabel(r.semana))}</td><td>${esc(r.cadena)}</td><td>${esc(r.zona)}</td><td class="num">${r.programado}</td><td class="num">${r.porprogramar}</td></tr>`).join('');
+    head='<th>Semana</th><th>Cadena</th><th>Zona</th><th class="num">Prog.</th><th class="num">Por prog.</th><th class="num">Efect.</th>';
+    body=rows.map(r=>`<tr><td>${esc(semLabel(r.semana))}</td><td>${esc(r.cadena)}</td><td>${esc(r.zona)}</td><td class="num">${r.programado}</td><td class="num">${r.porprogramar}</td><td class="num">${r.efectivo}</td></tr>`).join('');
   }
   return `<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
     <p class="muted" style="font-size:11px;margin-top:6px">Vista previa de las primeras filas.</p>`;

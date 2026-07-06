@@ -22,7 +22,7 @@ const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
   'Fecha Factura','Fecha Vencimiento','Estado','Estado Detalle'];
 const HDR_GASTOS   = ['ID','Cliente','Tipo de SS','Mes','Grupo','Categoria','Monto','Detalle'];
 const HDR_MAESTROS = ['Tipo','Valor'];
-const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Obs'];
+const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
 function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -135,7 +135,8 @@ function handleGet(e) {
       cadena:       s(r[4]),
       programado:   n(r[5]),
       porprogramar: n(r[6]),
-      obs:          s(r[7]),
+      efectivo:     n(r[7]),
+      obs:          s(r[8]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -250,7 +251,7 @@ function handlePost(e) {
     if (!b.cadena || !b.semana) return jsonResp({ error: 'Cadena y semana requeridos' });
     const id = b.id || ('M' + new Date().getTime());
     const row = [id, b.semana||'', b.tipo||'', b.zona||'', b.cadena||'',
-      num(b.programado), num(b.porprogramar), b.obs||''];
+      num(b.programado), num(b.porprogramar), num(b.efectivo), b.obs||''];
     const found = findRow(sh, id);
     if (found > 0) sh.getRange(found, 1, 1, HDR_MERCH.length).setValues([row]);
     else sh.appendRow(row);
@@ -271,7 +272,7 @@ function handlePost(e) {
     const base = new Date().getTime();
     const rows = items.map((b, i) => [
       b.id || ('M' + (base + i)), b.semana||'', b.tipo||'', b.zona||'', b.cadena||'',
-      num(b.programado), num(b.porprogramar), b.obs||''
+      num(b.programado), num(b.porprogramar), num(b.efectivo), b.obs||''
     ]);
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_MERCH.length).setValues(rows);
     return jsonResp({ ok: true, added: rows.length });
