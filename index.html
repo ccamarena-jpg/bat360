@@ -129,7 +129,7 @@
       <a data-view="gastos"><span class="ico">💸</span> Gastos</a>
       <a data-view="margen"><span class="ico">📈</span> Margen por servicio</a>
       <div class="sec">Operaciones</div>
-      <a class="soon"><span class="ico">🛒</span> Promotoría</a>
+      <a data-view="promotoria"><span class="ico">🛒</span> Promotoría</a>
       <a data-view="merch"><span class="ico">📦</span> Merch</a>
       <a data-view="calendario"><span class="ico">🗓️</span> Calendario</a>
       <div class="sec">Sistema</div>
@@ -168,6 +168,7 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnfh98OMw0mVuBIF02OUPr
 const STATE = {
   url: localStorage.getItem('bat_url') || GAS_URL,
   fact: [], gastos: [], merch: [], proyectos: [], maestros: {},
+  promo: {kpi:[], materiales:[], incidencias:[]},
   view: 'resumen',
 };
 
@@ -206,10 +207,11 @@ async function cargarTodo(){
   if(!STATE.url){ setConn(false,'Sin configurar'); render(); return; }
   setConn(false,'Cargando…');
   try{
-    const [f,g,me,pr,m] = await Promise.all([
-      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getProyectos'), apiGet('getMaestros')
+    const [f,g,me,pr,po,m] = await Promise.all([
+      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getProyectos'), apiGet('getPromo'), apiGet('getMaestros')
     ]);
     STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.proyectos = pr.rows||[]; STATE.maestros = m.maestros||{};
+    STATE.promo = {kpi:po.kpi||[], materiales:po.materiales||[], incidencias:po.incidencias||[]};
     setConn(true, `${STATE.fact.length} fact · ${STATE.gastos.length} gastos · ${STATE.merch.length} merch · ${STATE.proyectos.length} proy`);
     render();
   }catch(e){ setConn(false,'Error'); toast(e.message,true); render(); }
@@ -222,6 +224,7 @@ const TITLES = {
   facturacion:['Facturación','Facturas por cliente y servicio'],
   gastos:['Gastos','Costos por servicio para el margen'],
   margen:['Margen por servicio','Facturación − Gastos = Margen'],
+  promotoria:['Promotoría','Cobertura, efectividad, materiales e incidencias por cadena'],
   merch:['Merch','Seguimiento semanal de OTs y proyectos'],
   calendario:['Calendario','Línea de tiempo de proyectos'],
   config:['Configuración','Conexión con Google Sheets'],
@@ -251,6 +254,7 @@ function render(){
   else if(STATE.view==='facturacion') renderFacturacion(c);
   else if(STATE.view==='gastos') renderGastos(c);
   else if(STATE.view==='margen') renderMargen(c);
+  else if(STATE.view==='promotoria') renderPromotoria(c);
   else if(STATE.view==='merch') renderMerch(c);
   else if(STATE.view==='calendario') renderCalendario(c);
   else if(STATE.view==='config') renderConfig(c);
@@ -833,6 +837,126 @@ async function borrarProyecto(id){
   try{ await apiPost({accion:'deleteProyecto',id}); toast('Proyecto borrado'); await cargarTodo(); STATE._merchTab='proyectos'; goView('merch'); }
   catch(e){ toast(e.message,true); }
 }
+
+// ════════ VISTA: PROMOTORÍA ════════
+function renderPromotoria(c){
+  const CADENAS=['Ava','Oxxo','Repsol','Primax','Tambo'];
+  STATE._promoCad = STATE._promoCad || 'Ava';
+  const cad = STATE._promoCad;
+  const low = x=>(x||'').toString().toLowerCase();
+  const kpi = STATE.promo.kpi.find(k=>low(k.cadena)===low(cad)) || {};
+  const mats = STATE.promo.materiales.filter(m=>low(m.cadena)===low(cad));
+  const incs = STATE.promo.incidencias.filter(i=>low(i.cadena)===low(cad));
+  const pct=(a,b)=> b? Math.round(a/b*100):0;
+  const kv=v=> (v!=null&&v!=='')? v+'%':'·';
+
+  c.innerHTML=`
+  <div class="tabs">${CADENAS.map(x=>`<button class="${x===cad?'active':''}" onclick="STATE._promoCad='${x}';renderPromotoria(el('content'))">${x}</button>`).join('')}</div>
+
+  <div class="panel">
+    <h3>📊 Cobertura y Efectividad <span class="tag">${esc(cad)}</span><button class="btn sec sm" style="margin-left:auto" onclick="editarPromoKPI('${cad}')">✎ Editar</button></h3>
+    <div class="kpis" style="margin-bottom:0">
+      <div class="kpi"><div class="lbl">Cobertura S1</div><div class="val ${kpi.cobS1>=80?'pos':''}">${kv(kpi.cobS1)}</div></div>
+      <div class="kpi"><div class="lbl">Cobertura S2</div><div class="val ${kpi.cobS2>=80?'pos':''}">${kv(kpi.cobS2)}</div></div>
+      <div class="kpi"><div class="lbl">Efectividad S1</div><div class="val ${kpi.efecS1>=80?'pos':''}">${kv(kpi.efecS1)}</div></div>
+      <div class="kpi"><div class="lbl">Efectividad S2</div><div class="val ${kpi.efecS2>=80?'pos':''}">${kv(kpi.efecS2)}</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>🔌 Dinámica Conectados <span class="tag">${esc(cad)}</span><button class="btn sec sm" style="margin-left:auto" onclick="editarPromoKPI('${cad}')">✎ Editar</button></h3>
+    <div style="display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap">
+      <div class="kpi" style="min-width:150px"><div class="lbl">Conectados</div><div class="val">${kpi.conectados!=null&&kpi.conectados!==''?kpi.conectados:'·'}</div></div>
+      <div style="flex:1;min-width:240px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Notas / dinámica</div>
+        <div style="margin-top:6px;white-space:pre-wrap;color:${kpi.conectadosNota?'var(--txt)':'var(--muted)'}">${esc(kpi.conectadosNota)||'Sin notas. Usa ✎ Editar para agregar la dinámica de conectados.'}</div></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>🧱 Materiales a implementar <span class="tag">${esc(cad)}</span><button class="btn sm" style="margin-left:auto" onclick="abrirMaterial('${cad}')">+ Material</button></h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Material</th><th>Categoría</th><th class="num">Tiendas</th><th class="num">Avance S1</th><th class="num">Avance S2</th><th class="num">% avance</th><th>Obs</th><th></th></tr></thead>
+      <tbody>${mats.length? mats.map(m=>{const av=Math.max(+m.avanceS1||0,+m.avanceS2||0);const p=pct(av,+m.tiendas||0);return `<tr>
+        <td><b>${esc(m.material)}</b></td><td>${esc(m.categoria)}</td><td class="num">${m.tiendas||'·'}</td>
+        <td class="num">${m.avanceS1||'·'}</td><td class="num">${m.avanceS2||'·'}</td>
+        <td class="num ${p>=80?'pos':''}">${m.tiendas?p+'%':'·'}</td>
+        <td style="white-space:normal;max-width:220px">${esc(m.obs)}</td>
+        <td><div class="row-actions"><button class="btn sec sm" onclick='abrirMaterial(${JSON.stringify(cad)},${JSON.stringify(m.id)})'>✎</button><button class="btn danger" onclick='borrarMaterial(${JSON.stringify(m.id)})'>🗑</button></div></td>
+      </tr>`;}).join('') : `<tr><td colspan="8"><div class="empty">Sin materiales. Agrega los materiales a implementar en ${esc(cad)}.</div></td></tr>`}</tbody>
+    </table></div>
+  </div>
+
+  <div class="panel">
+    <h3>⚠️ Incidencias <span class="tag">${esc(cad)}</span><button class="btn sm" style="margin-left:auto" onclick="abrirIncidencia('${cad}')">+ Incidencia</button></h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Fecha</th><th>Incidencia</th><th>Responsable</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${incs.length? incs.map(i=>`<tr>
+        <td>${fechaLabel(i.fecha)}</td><td style="white-space:normal;max-width:440px">${esc(i.incidencia)}</td>
+        <td>${esc(i.responsable)}</td><td><span class="pill ${i.estado==='Resuelta'?'Pagado':(i.estado==='En proceso'?'Programado':'Pendiente')}">${esc(i.estado||'Abierta')}</span></td>
+        <td><div class="row-actions"><button class="btn sec sm" onclick='abrirIncidencia(${JSON.stringify(cad)},${JSON.stringify(i.id)})'>✎</button><button class="btn danger" onclick='borrarIncidencia(${JSON.stringify(i.id)})'>🗑</button></div></td>
+      </tr>`).join('') : `<tr><td colspan="5"><div class="empty">Sin incidencias en ${esc(cad)}. Usa <b>+ Incidencia</b> para registrarlas.</div></td></tr>`}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function editarPromoKPI(cad){
+  const k=STATE.promo.kpi.find(x=>(x.cadena||'').toLowerCase()===cad.toLowerCase())||{};
+  showModal(`<h3>Cobertura, efectividad y conectados · ${esc(cad)}</h3>
+    <div class="grid2">
+      <div class="field"><label>Cobertura S1 (%)</label><input type="number" id="k_c1" value="${k.cobS1!=null&&k.cobS1!==''?k.cobS1:''}"></div>
+      <div class="field"><label>Cobertura S2 (%)</label><input type="number" id="k_c2" value="${k.cobS2!=null&&k.cobS2!==''?k.cobS2:''}"></div>
+      <div class="field"><label>Efectividad S1 (%)</label><input type="number" id="k_e1" value="${k.efecS1!=null&&k.efecS1!==''?k.efecS1:''}"></div>
+      <div class="field"><label>Efectividad S2 (%)</label><input type="number" id="k_e2" value="${k.efecS2!=null&&k.efecS2!==''?k.efecS2:''}"></div>
+      <div class="field"><label>Conectados (n°)</label><input type="number" id="k_con" value="${k.conectados!=null&&k.conectados!==''?k.conectados:''}"></div>
+      <div class="field full"><label>Notas / dinámica Conectados</label><textarea id="k_nota" rows="3">${esc(k.conectadosNota||'')}</textarea></div>
+    </div>
+    <div class="modal-actions"><button class="btn sec" onclick="cerrarModal()">Cancelar</button><button class="btn" onclick="guardarPromoKPI('${cad}')">Guardar</button></div>`);
+}
+async function guardarPromoKPI(cad){
+  const body={accion:'savePromoKPI', cadena:cad, cobS1:el('k_c1').value||0, cobS2:el('k_c2').value||0,
+    efecS1:el('k_e1').value||0, efecS2:el('k_e2').value||0, conectados:el('k_con').value||0, conectadosNota:el('k_nota').value};
+  cerrarModal();
+  try{ await apiPost(body); toast('Guardado'); STATE._promoCad=cad; await cargarTodo(); goView('promotoria'); }catch(e){ toast(e.message,true); }
+}
+function abrirMaterial(cad,id){
+  const m=id?STATE.promo.materiales.find(x=>x.id===id):{};
+  showModal(`<h3>${id?'Editar':'Nuevo'} material · ${esc(cad)}</h3>
+    <div class="grid2">
+      <div class="field full"><label>Material</label><input id="mt_mat" value="${esc(m.material||'')}" placeholder="Cava LS Core, Dípticos Vuse…"></div>
+      <div class="field"><label>Categoría</label><input id="mt_cat" value="${esc(m.categoria||'')}" placeholder="POP, Dispensadores…"></div>
+      <div class="field"><label>Tiendas (cantidad)</label><input type="number" id="mt_td" value="${m.tiendas!=null&&m.tiendas!==''?m.tiendas:''}"></div>
+      <div class="field"><label>Avance S1 (tiendas implem.)</label><input type="number" id="mt_a1" value="${m.avanceS1!=null&&m.avanceS1!==''?m.avanceS1:''}"></div>
+      <div class="field"><label>Avance S2 (tiendas implem.)</label><input type="number" id="mt_a2" value="${m.avanceS2!=null&&m.avanceS2!==''?m.avanceS2:''}"></div>
+      <div class="field full"><label>Observación</label><input id="mt_obs" value="${esc(m.obs||'')}"></div>
+    </div>
+    <div class="modal-actions"><button class="btn sec" onclick="cerrarModal()">Cancelar</button><button class="btn" onclick='guardarMaterial(${JSON.stringify(cad)},${JSON.stringify(id||"")})'>Guardar</button></div>`);
+}
+async function guardarMaterial(cad,id){
+  const body={accion:'savePromoMaterial', id:id||'', cadena:cad, categoria:el('mt_cat').value, material:el('mt_mat').value,
+    tiendas:el('mt_td').value||0, avanceS1:el('mt_a1').value||0, avanceS2:el('mt_a2').value||0, obs:el('mt_obs').value};
+  if(!body.material){ toast('Material requerido',true); return; }
+  cerrarModal();
+  try{ await apiPost(body); toast('Material guardado'); STATE._promoCad=cad; await cargarTodo(); goView('promotoria'); }catch(e){ toast(e.message,true); }
+}
+async function borrarMaterial(id){ if(!confirm('¿Borrar este material?'))return; try{await apiPost({accion:'deletePromoMaterial',id});toast('Borrado');await cargarTodo();goView('promotoria');}catch(e){toast(e.message,true);} }
+function abrirIncidencia(cad,id){
+  const i=id?STATE.promo.incidencias.find(x=>x.id===id):{estado:'Abierta'};
+  showModal(`<h3>${id?'Editar':'Nueva'} incidencia · ${esc(cad)}</h3>
+    <div class="grid2">
+      <div class="field"><label>Fecha</label><input type="date" id="in_f" value="${i.fecha||''}"></div>
+      <div class="field"><label>Estado</label><select id="in_est">${['Abierta','En proceso','Resuelta'].map(o=>`<option ${o===(i.estado||'Abierta')?'selected':''}>${o}</option>`).join('')}</select></div>
+      <div class="field full"><label>Incidencia</label><textarea id="in_txt" rows="3" placeholder="Describe la incidencia…">${esc(i.incidencia||'')}</textarea></div>
+      <div class="field full"><label>Responsable</label><input id="in_resp" value="${esc(i.responsable||'')}"></div>
+    </div>
+    <div class="modal-actions"><button class="btn sec" onclick="cerrarModal()">Cancelar</button><button class="btn" onclick='guardarIncidencia(${JSON.stringify(cad)},${JSON.stringify(id||"")})'>Guardar</button></div>`);
+}
+async function guardarIncidencia(cad,id){
+  const body={accion:'savePromoIncidencia', id:id||'', cadena:cad, fecha:el('in_f').value,
+    incidencia:el('in_txt').value, responsable:el('in_resp').value, estado:el('in_est').value};
+  cerrarModal();
+  try{ await apiPost(body); toast('Incidencia guardada'); STATE._promoCad=cad; await cargarTodo(); goView('promotoria'); }catch(e){ toast(e.message,true); }
+}
+async function borrarIncidencia(id){ if(!confirm('¿Borrar esta incidencia?'))return; try{await apiPost({accion:'deletePromoIncidencia',id});toast('Borrada');await cargarTodo();goView('promotoria');}catch(e){toast(e.message,true);} }
 
 // ════════ VISTA: CALENDARIO (línea de tiempo de proyectos) ════════
 function renderCalendario(c){

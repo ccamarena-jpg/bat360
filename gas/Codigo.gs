@@ -17,6 +17,9 @@ const SHEET_GASTOS   = 'Gastos';
 const SHEET_MAESTROS = 'Maestros';
 const SHEET_MERCH    = 'Merch';
 const SHEET_PROY     = 'Proyectos';
+const SHEET_PKPI     = 'PromoKPI';
+const SHEET_PMAT     = 'PromoMateriales';
+const SHEET_PINC     = 'PromoIncidencias';
 
 const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
   'Servicio / Proyecto','Mes','Importe','OS','Serie Factura','# Factura',
@@ -25,6 +28,9 @@ const HDR_GASTOS   = ['ID','Cliente','Tipo de SS','Mes','Grupo','Categoria','Mon
 const HDR_MAESTROS = ['Tipo','Valor'];
 const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'];
 const HDR_PROY     = ['ID','Nombre','Inicio','Fin','Dias','Personal','Ciudades','Cuentas KA','Efectividad','Cobertura','Avances','Estado','Obs','Responsable'];
+const HDR_PKPI     = ['Cadena','Cobertura S1','Cobertura S2','Efectividad S1','Efectividad S2','Conectados','Conectados Nota'];
+const HDR_PMAT     = ['ID','Cadena','Categoria','Material','Tiendas','Avance S1','Avance S2','Obs'];
+const HDR_PINC     = ['ID','Cadena','Fecha','Incidencia','Responsable','Estado'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
 function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -49,6 +55,9 @@ function initSheets() {
   getOrCreate(ss, SHEET_GASTOS,   HDR_GASTOS);
   getOrCreate(ss, SHEET_MERCH,    HDR_MERCH);
   getOrCreate(ss, SHEET_PROY,     HDR_PROY);
+  getOrCreate(ss, SHEET_PKPI,     HDR_PKPI);
+  getOrCreate(ss, SHEET_PMAT,     HDR_PMAT);
+  getOrCreate(ss, SHEET_PINC,     HDR_PINC);
   const shM = getOrCreate(ss, SHEET_MAESTROS, HDR_MAESTROS);
 
   // Sembrar catálogos solo si está vacío
@@ -165,6 +174,26 @@ function handleGet(e) {
       responsable: s(r[13]),
     }));
     return jsonResp({ rows, count: rows.length });
+  }
+
+  if (accion === 'getPromo') {
+    const out = { kpi: [], materiales: [], incidencias: [] };
+    const shK = ss.getSheetByName(SHEET_PKPI);
+    if (shK) shK.getDataRange().getValues().slice(1).filter(r => r[0]).forEach(r => out.kpi.push({
+      cadena: s(r[0]), cobS1: n(r[1]), cobS2: n(r[2]), efecS1: n(r[3]), efecS2: n(r[4]),
+      conectados: n(r[5]), conectadosNota: s(r[6])
+    }));
+    const shM = ss.getSheetByName(SHEET_PMAT);
+    if (shM) shM.getDataRange().getValues().slice(1).filter(r => r[0]).forEach(r => out.materiales.push({
+      id: s(r[0]), cadena: s(r[1]), categoria: s(r[2]), material: s(r[3]),
+      tiendas: n(r[4]), avanceS1: n(r[5]), avanceS2: n(r[6]), obs: s(r[7])
+    }));
+    const shI = ss.getSheetByName(SHEET_PINC);
+    if (shI) shI.getDataRange().getValues().slice(1).filter(r => r[0]).forEach(r => out.incidencias.push({
+      id: s(r[0]), cadena: s(r[1]), fecha: d(r[2]), incidencia: s(r[3]),
+      responsable: s(r[4]), estado: s(r[5])
+    }));
+    return jsonResp(out);
   }
 
   if (accion === 'getMaestros') {
@@ -321,6 +350,54 @@ function handlePost(e) {
 
   if (accion === 'deleteProyecto') {
     const sh = ss.getSheetByName(SHEET_PROY);
+    const found = findRow(sh, body.id);
+    if (found > 0) { sh.deleteRow(found); return jsonResp({ ok: true, action: 'deleted' }); }
+    return jsonResp({ ok: false, error: 'ID no encontrado' });
+  }
+
+  // ── PROMOTORÍA ─────────────────────────────────────────────────
+  if (accion === 'savePromoKPI') {
+    const sh = getOrCreate(ss, SHEET_PKPI, HDR_PKPI);
+    const b = body;
+    if (!b.cadena) return jsonResp({ error: 'Cadena requerida' });
+    const row = [b.cadena, num(b.cobS1), num(b.cobS2), num(b.efecS1), num(b.efecS2), num(b.conectados), b.conectadosNota||''];
+    const found = findRow(sh, b.cadena);
+    if (found > 0) sh.getRange(found, 1, 1, HDR_PKPI.length).setValues([row]);
+    else sh.appendRow(row);
+    return jsonResp({ ok: true, action: found > 0 ? 'updated' : 'created' });
+  }
+
+  if (accion === 'savePromoMaterial') {
+    const sh = getOrCreate(ss, SHEET_PMAT, HDR_PMAT);
+    const b = body;
+    if (!b.cadena || !b.material) return jsonResp({ error: 'Cadena y material requeridos' });
+    const id = b.id || ('PM' + new Date().getTime());
+    const row = [id, b.cadena||'', b.categoria||'', b.material||'', num(b.tiendas), num(b.avanceS1), num(b.avanceS2), b.obs||''];
+    const found = findRow(sh, id);
+    if (found > 0) sh.getRange(found, 1, 1, HDR_PMAT.length).setValues([row]);
+    else sh.appendRow(row);
+    return jsonResp({ ok: true, id: id, action: found > 0 ? 'updated' : 'created' });
+  }
+  if (accion === 'deletePromoMaterial') {
+    const sh = ss.getSheetByName(SHEET_PMAT);
+    const found = findRow(sh, body.id);
+    if (found > 0) { sh.deleteRow(found); return jsonResp({ ok: true, action: 'deleted' }); }
+    return jsonResp({ ok: false, error: 'ID no encontrado' });
+  }
+
+  if (accion === 'savePromoIncidencia') {
+    const sh = getOrCreate(ss, SHEET_PINC, HDR_PINC);
+    const b = body;
+    if (!b.cadena) return jsonResp({ error: 'Cadena requerida' });
+    const id = b.id || ('PI' + new Date().getTime());
+    const row = [id, b.cadena||'', b.fecha||'', b.incidencia||'', b.responsable||'', b.estado||'Abierta'];
+    const found = findRow(sh, id);
+    if (found > 0) sh.getRange(found, 1, 1, HDR_PINC.length).setValues([row]);
+    else sh.appendRow(row);
+    return jsonResp({ ok: true, id: id, action: found > 0 ? 'updated' : 'created' });
+  }
+  if (accion === 'deletePromoIncidencia') {
+    const sh = ss.getSheetByName(SHEET_PINC);
     const found = findRow(sh, body.id);
     if (found > 0) { sh.deleteRow(found); return jsonResp({ ok: true, action: 'deleted' }); }
     return jsonResp({ ok: false, error: 'ID no encontrado' });
