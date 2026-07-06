@@ -16,6 +16,7 @@ const SHEET_FACT     = 'Facturacion';
 const SHEET_GASTOS   = 'Gastos';
 const SHEET_MAESTROS = 'Maestros';
 const SHEET_MERCH    = 'Merch';
+const SHEET_PROY     = 'Proyectos';
 
 const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
   'Servicio / Proyecto','Mes','Importe','OS','Serie Factura','# Factura',
@@ -23,6 +24,7 @@ const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
 const HDR_GASTOS   = ['ID','Cliente','Tipo de SS','Mes','Grupo','Categoria','Monto','Detalle'];
 const HDR_MAESTROS = ['Tipo','Valor'];
 const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'];
+const HDR_PROY     = ['ID','Nombre','Inicio','Fin','Dias','Personal','Ciudades','Cuentas KA','Efectividad','Cobertura','Avances','Estado','Obs'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
 function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -46,6 +48,7 @@ function initSheets() {
   getOrCreate(ss, SHEET_FACT,     HDR_FACT);
   getOrCreate(ss, SHEET_GASTOS,   HDR_GASTOS);
   getOrCreate(ss, SHEET_MERCH,    HDR_MERCH);
+  getOrCreate(ss, SHEET_PROY,     HDR_PROY);
   const shM = getOrCreate(ss, SHEET_MAESTROS, HDR_MAESTROS);
 
   // Sembrar catálogos solo si está vacío
@@ -137,6 +140,28 @@ function handleGet(e) {
       porprogramar: n(r[6]),
       efectivo:     n(r[7]),
       obs:          s(r[8]),
+    }));
+    return jsonResp({ rows, count: rows.length });
+  }
+
+  if (accion === 'getProyectos') {
+    const sh = ss.getSheetByName(SHEET_PROY);
+    if (!sh) return jsonResp({ rows: [], count: 0 });
+    const data = sh.getDataRange().getValues();
+    const rows = data.slice(1).filter(r => r[0]).map(r => ({
+      id:          s(r[0]),
+      nombre:      s(r[1]),
+      inicio:      d(r[2]),
+      fin:         d(r[3]),
+      dias:        n(r[4]),
+      personal:    n(r[5]),
+      ciudades:    s(r[6]),
+      cuentaska:   s(r[7]),
+      efectividad: n(r[8]),
+      cobertura:   n(r[9]),
+      avances:     s(r[10]),
+      estado:      s(r[11]),
+      obs:         s(r[12]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -276,6 +301,28 @@ function handlePost(e) {
     ]);
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_MERCH.length).setValues(rows);
     return jsonResp({ ok: true, added: rows.length });
+  }
+
+  // ── PROYECTOS ──────────────────────────────────────────────────
+  if (accion === 'saveProyecto') {
+    const sh = getOrCreate(ss, SHEET_PROY, HDR_PROY);
+    const b = body;
+    if (!b.nombre) return jsonResp({ error: 'Nombre del proyecto requerido' });
+    const id = b.id || ('P' + new Date().getTime());
+    const row = [id, b.nombre||'', b.inicio||'', b.fin||'', num(b.dias), num(b.personal),
+      b.ciudades||'', b.cuentaska||'', num(b.efectividad), num(b.cobertura),
+      b.avances||'', b.estado||'Activo', b.obs||''];
+    const found = findRow(sh, id);
+    if (found > 0) sh.getRange(found, 1, 1, HDR_PROY.length).setValues([row]);
+    else sh.appendRow(row);
+    return jsonResp({ ok: true, id: id, action: found > 0 ? 'updated' : 'created' });
+  }
+
+  if (accion === 'deleteProyecto') {
+    const sh = ss.getSheetByName(SHEET_PROY);
+    const found = findRow(sh, body.id);
+    if (found > 0) { sh.deleteRow(found); return jsonResp({ ok: true, action: 'deleted' }); }
+    return jsonResp({ ok: false, error: 'ID no encontrado' });
   }
 
   // ── MAESTROS ───────────────────────────────────────────────────

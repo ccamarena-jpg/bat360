@@ -131,7 +131,7 @@
       <div class="sec">Operaciones</div>
       <a class="soon"><span class="ico">🛒</span> Promotoría</a>
       <a data-view="merch"><span class="ico">📦</span> Merch</a>
-      <a class="soon"><span class="ico">🗓️</span> Calendario</a>
+      <a data-view="calendario"><span class="ico">🗓️</span> Calendario</a>
       <div class="sec">Sistema</div>
       <a data-view="config"><span class="ico">⚙️</span> Configuración</a>
     </nav>
@@ -167,7 +167,7 @@ const CLAVE = 'BAT360';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnfh98OMw0mVuBIF02OUPrWmCpcyrH7tOaOmtFSY1dmJtxreoiMWudJ1tPiZYS8NgAvA/exec';
 const STATE = {
   url: localStorage.getItem('bat_url') || GAS_URL,
-  fact: [], gastos: [], merch: [], maestros: {},
+  fact: [], gastos: [], merch: [], proyectos: [], maestros: {},
   view: 'resumen',
 };
 
@@ -206,11 +206,11 @@ async function cargarTodo(){
   if(!STATE.url){ setConn(false,'Sin configurar'); render(); return; }
   setConn(false,'Cargando…');
   try{
-    const [f,g,me,m] = await Promise.all([
-      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getMaestros')
+    const [f,g,me,pr,m] = await Promise.all([
+      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getProyectos'), apiGet('getMaestros')
     ]);
-    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.maestros = m.maestros||{};
-    setConn(true, `${STATE.fact.length} facturas · ${STATE.gastos.length} gastos · ${STATE.merch.length} merch`);
+    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.proyectos = pr.rows||[]; STATE.maestros = m.maestros||{};
+    setConn(true, `${STATE.fact.length} fact · ${STATE.gastos.length} gastos · ${STATE.merch.length} merch · ${STATE.proyectos.length} proy`);
     render();
   }catch(e){ setConn(false,'Error'); toast(e.message,true); render(); }
 }
@@ -222,7 +222,8 @@ const TITLES = {
   facturacion:['Facturación','Facturas por cliente y servicio'],
   gastos:['Gastos','Costos por servicio para el margen'],
   margen:['Margen por servicio','Facturación − Gastos = Margen'],
-  merch:['Merch','Seguimiento semanal de OTs — programadas y por programar'],
+  merch:['Merch','Seguimiento semanal de OTs y proyectos'],
+  calendario:['Calendario','Línea de tiempo de proyectos'],
   config:['Configuración','Conexión con Google Sheets'],
 };
 document.getElementById('nav').addEventListener('click',e=>{
@@ -251,6 +252,7 @@ function render(){
   else if(STATE.view==='gastos') renderGastos(c);
   else if(STATE.view==='margen') renderMargen(c);
   else if(STATE.view==='merch') renderMerch(c);
+  else if(STATE.view==='calendario') renderCalendario(c);
   else if(STATE.view==='config') renderConfig(c);
 }
 function goView(v){ document.querySelector(`.nav a[data-view="${v}"]`).click(); }
@@ -577,8 +579,25 @@ function renderMargen(c){
 
 // ════════ VISTA: MERCH ════════
 function semLabel(s){ if(!s) return '—'; const p=(''+s).split('-'); if(p.length<3) return s; return (+p[2])+' '+MESES[(+p[1])-1]; }
+function fechaLabel(s){ if(!s) return '—'; const p=(''+s).split('-'); if(p.length<3) return s; return p[2]+'/'+p[1]+'/'+p[0]; }
+function diasEntre(a,b){ if(!a||!b) return 0; const d1=new Date(a), d2=new Date(b); const ms=d2-d1; return isNaN(ms)?0:Math.round(ms/86400000)+1; }
+function parseAvances(str){ // "2026-07-06=25|2026-07-13=60" -> [{semana,valor}]
+  return (str||'').split('|').map(x=>x.trim()).filter(Boolean).map(x=>{const [s,v]=x.split('=');return {semana:(s||'').trim(), valor:parseFloat(v)||0};}).filter(a=>a.semana);
+}
+function fmtAvances(arr){ return arr.filter(a=>a.semana).map(a=>`${a.semana}=${a.valor}`).join('|'); }
 
 function renderMerch(c){
+  STATE._merchTab = STATE._merchTab || 'ots';
+  const tab = STATE._merchTab;
+  c.innerHTML = `<div class="tabs">
+    <button class="${tab==='ots'?'active':''}" onclick="STATE._merchTab='ots';renderMerch(el('content'))">📦 Seguimiento OTs</button>
+    <button class="${tab==='proyectos'?'active':''}" onclick="STATE._merchTab='proyectos';renderMerch(el('content'))">📋 Proyectos actuales</button>
+  </div><div id="merch-sub"></div>`;
+  const sub = el('merch-sub');
+  if(tab==='proyectos') renderProyectos(sub); else renderMerchOts(sub);
+}
+
+function renderMerchOts(c){
   if(!STATE.merch.length){
     c.innerHTML=`<div class="filters">
       <button class="btn" onclick="abrirCarga('merch')">⬆ Cargar consolidado</button>
@@ -707,6 +726,165 @@ async function borrarMerch(id){
   if(!confirm('¿Borrar este registro?')) return;
   try{ await apiPost({accion:'deleteMerch',id}); toast('Registro borrado'); await cargarTodo(); goView('merch'); }
   catch(e){ toast(e.message,true); }
+}
+
+// ════════ SUB-VISTA: PROYECTOS ════════
+function renderProyectos(c){
+  const proy=STATE.proyectos;
+  if(!proy.length){
+    c.innerHTML=`<div class="filters"><div style="flex:1"></div><button class="btn" onclick="abrirProyecto()">+ Nuevo proyecto</button></div>
+     <div class="panel"><div class="empty"><h3 style="justify-content:center">📋 Sin proyectos aún</h3>
+     <p class="muted" style="margin-top:8px">Crea tu primer proyecto con fechas, personal, ciudades y cuentas KA. Sus fechas aparecerán en el <b>Calendario</b>.</p>
+     <button class="btn" style="margin-top:14px" onclick="abrirProyecto()">+ Nuevo proyecto</button></div></div>`;
+    return;
+  }
+  const n=proy.length;
+  const totPers=proy.reduce((a,b)=>a+(+b.personal||0),0);
+  const efProm=proy.reduce((a,b)=>a+(+b.efectividad||0),0)/n;
+  const cobProm=proy.reduce((a,b)=>a+(+b.cobertura||0),0)/n;
+  const semanas=[...new Set(proy.flatMap(p=>parseAvances(p.avances).map(a=>a.semana)))].filter(Boolean).sort();
+  const avMap={}; proy.forEach(p=>{avMap[p.id]={}; parseAvances(p.avances).forEach(a=>avMap[p.id][a.semana]=a.valor);});
+  const pill=e=> e==='Activo'?'Pagado':(e==='Cerrado'?'Pendiente':'Programado');
+
+  c.innerHTML=`
+  <div class="filters"><div style="flex:1"></div><button class="btn" onclick="abrirProyecto()">+ Nuevo proyecto</button></div>
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">Proyectos</div><div class="val">${n}</div><div class="hint">${proy.filter(p=>(p.estado||'Activo')==='Activo').length} activos</div></div>
+    <div class="kpi"><div class="lbl">Personal asignado</div><div class="val">${totPers}</div><div class="hint">total en proyectos</div></div>
+    <div class="kpi"><div class="lbl">Efectividad prom.</div><div class="val ${efProm>=80?'pos':''}">${efProm.toFixed(0)}%</div></div>
+    <div class="kpi"><div class="lbl">Cobertura prom.</div><div class="val ${cobProm>=80?'pos':''}">${cobProm.toFixed(0)}%</div></div>
+  </div>
+  <div class="panel">
+    <h3>📋 Proyectos actuales</h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Proyecto</th><th>Inicio</th><th>Fin</th><th class="num">Días</th><th class="num">Personal</th><th>Ciudades</th><th>Cuentas KA</th><th class="num">Efectiv.</th><th class="num">Cobert.</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${proy.map(p=>`<tr>
+        <td><b>${esc(p.nombre)}</b></td><td>${fechaLabel(p.inicio)}</td><td>${fechaLabel(p.fin)}</td>
+        <td class="num">${p.dias||diasEntre(p.inicio,p.fin)||'·'}</td><td class="num">${p.personal||'·'}</td>
+        <td style="white-space:normal;max-width:170px">${esc(p.ciudades)}</td><td style="white-space:normal;max-width:170px">${esc(p.cuentaska)}</td>
+        <td class="num ${p.efectividad>=80?'pos':''}">${(p.efectividad!=null&&p.efectividad!=='')?p.efectividad+'%':'·'}</td>
+        <td class="num ${p.cobertura>=80?'pos':''}">${(p.cobertura!=null&&p.cobertura!=='')?p.cobertura+'%':'·'}</td>
+        <td><span class="pill ${pill(p.estado||'Activo')}">${esc(p.estado||'Activo')}</span></td>
+        <td><div class="row-actions"><button class="btn sec sm" onclick='abrirProyecto(${JSON.stringify(p.id)})'>✎</button><button class="btn danger" onclick='borrarProyecto(${JSON.stringify(p.id)})'>🗑</button></div></td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+  </div>
+  ${semanas.length? `<div class="panel">
+    <h3>📈 Avances semanales por proyecto <span class="tag">% de avance</span></h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Proyecto</th>${semanas.map(s=>`<th class="num" title="${s}">${semLabel(s)}</th>`).join('')}</tr></thead>
+      <tbody>${proy.map(p=>`<tr><td><b>${esc(p.nombre)}</b></td>${semanas.map(s=>{const v=avMap[p.id][s];return `<td class="num" style="${v!=null?'color:var(--brand);font-weight:600':'color:var(--muted)'}">${v!=null?v+'%':'·'}</td>`}).join('')}</tr>`).join('')}</tbody>
+    </table></div>
+  </div>`:'<p class="muted" style="font-size:12px">💡 Agrega avances semanales al editar un proyecto para ver aquí la matriz de progreso.</p>'}`;
+}
+
+function abrirProyecto(id){
+  const p=id?STATE.proyectos.find(x=>x.id===id):{estado:'Activo'};
+  const av=parseAvances(p.avances);
+  showModal(`
+    <h3>${id?'Editar':'Nuevo'} proyecto</h3>
+    <div class="grid2">
+      <div class="field full"><label>Nombre del proyecto</label><input id="p_nom" value="${esc(p.nombre||'')}"></div>
+      <div class="field"><label>Fecha inicio</label><input type="date" id="p_ini" value="${p.inicio||''}" onchange="calcDias()"></div>
+      <div class="field"><label>Fecha fin</label><input type="date" id="p_fin" value="${p.fin||''}" onchange="calcDias()"></div>
+      <div class="field"><label>Días (automático)</label><input id="p_dias" value="${p.dias||diasEntre(p.inicio,p.fin)||''}" readonly></div>
+      <div class="field"><label>Personal asignado</label><input type="number" id="p_pers" value="${p.personal!=null?p.personal:''}"></div>
+      <div class="field full"><label>Ciudades</label><input id="p_ciu" value="${esc(p.ciudades||'')}" placeholder="Lima, Arequipa, Cusco…"></div>
+      <div class="field full"><label>Cuentas KA</label><input id="p_ka" value="${esc(p.cuentaska||'')}" placeholder="Tambo, Oxxo, Primax…"></div>
+      <div class="field"><label>Efectividad (%)</label><input type="number" id="p_ef" value="${p.efectividad!=null?p.efectividad:''}"></div>
+      <div class="field"><label>Cobertura (%)</label><input type="number" id="p_cob" value="${p.cobertura!=null?p.cobertura:''}"></div>
+      <div class="field"><label>Estado</label><select id="p_est">${['Activo','En pausa','Cerrado'].map(o=>`<option ${o===(p.estado||'Activo')?'selected':''}>${o}</option>`).join('')}</select></div>
+      <div class="field full"><label>Observación</label><input id="p_obs" value="${esc(p.obs||'')}"></div>
+    </div>
+    <div class="field" style="margin-top:14px"><label>Avances semanales (semana → % de avance)</label>
+      <div id="av-list"></div>
+      <button class="btn sec sm" style="margin-top:6px" onclick="avAdd()">+ Semana</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn sec" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" onclick='guardarProyecto(${JSON.stringify(id||"")})'>Guardar</button>
+    </div>`);
+  av.forEach(a=>avAdd(a.semana,a.valor));
+}
+function avAdd(sem,val){
+  const wrap=el('av-list'); const div=document.createElement('div');
+  div.className='av-row'; div.style='display:flex;gap:8px;margin-bottom:6px';
+  div.innerHTML=`<input type="date" class="av-sem" value="${sem||''}" style="flex:1">
+    <input type="number" class="av-val" value="${val!=null?val:''}" placeholder="% avance" style="width:120px">
+    <button class="btn danger" onclick="this.parentNode.remove()">✕</button>`;
+  wrap.appendChild(div);
+}
+function calcDias(){ const i=el('p_ini').value, f=el('p_fin').value; el('p_dias').value = (i&&f)? diasEntre(i,f) : ''; }
+async function guardarProyecto(id){
+  const avs=[...document.querySelectorAll('#av-list .av-row')].map(r=>({semana:r.querySelector('.av-sem').value, valor:parseFloat(r.querySelector('.av-val').value)||0})).filter(a=>a.semana);
+  const body={accion:'saveProyecto', id:id||'', nombre:el('p_nom').value, inicio:el('p_ini').value, fin:el('p_fin').value,
+    dias:diasEntre(el('p_ini').value,el('p_fin').value), personal:el('p_pers').value||0, ciudades:el('p_ciu').value,
+    cuentaska:el('p_ka').value, efectividad:el('p_ef').value||0, cobertura:el('p_cob').value||0,
+    avances:fmtAvances(avs), estado:el('p_est').value, obs:el('p_obs').value};
+  if(!body.nombre){ toast('Nombre requerido',true); return; }
+  cerrarModal();
+  try{ await apiPost(body); toast('Proyecto guardado'); await cargarTodo(); STATE._merchTab='proyectos'; goView('merch'); }
+  catch(e){ toast(e.message,true); }
+}
+async function borrarProyecto(id){
+  if(!confirm('¿Borrar este proyecto?')) return;
+  try{ await apiPost({accion:'deleteProyecto',id}); toast('Proyecto borrado'); await cargarTodo(); STATE._merchTab='proyectos'; goView('merch'); }
+  catch(e){ toast(e.message,true); }
+}
+
+// ════════ VISTA: CALENDARIO (línea de tiempo de proyectos) ════════
+function renderCalendario(c){
+  const proy=STATE.proyectos.filter(p=>p.inicio&&p.fin).sort((a,b)=>a.inicio<b.inicio?-1:1);
+  if(!proy.length){
+    c.innerHTML=`<div class="panel"><div class="empty"><h3 style="justify-content:center">🗓️ Calendario de proyectos</h3>
+      <p class="muted" style="margin-top:8px">Agrega proyectos con fecha de inicio y fin en <b>Merch → Proyectos actuales</b> y aparecerán aquí como línea de tiempo.</p>
+      <button class="btn" style="margin-top:14px" onclick="STATE._merchTab='proyectos';goView('merch')">Ir a Proyectos</button></div></div>`;
+    return;
+  }
+  const min=proy.reduce((a,p)=>p.inicio<a?p.inicio:a, proy[0].inicio);
+  const max=proy.reduce((a,p)=>p.fin>a?p.fin:a, proy[0].fin);
+  const meses=[]; let d=new Date(min.slice(0,7)+'-01T00:00:00'); const end=new Date(max.slice(0,7)+'-01T00:00:00');
+  while(d<=end && meses.length<60){ meses.push((d.getMonth()+1)+'/'+d.getFullYear()); d.setMonth(d.getMonth()+1); }
+  const startDt=new Date(min.slice(0,7)+'-01T00:00:00');
+  const endDt=new Date(max.slice(0,7)+'-01T00:00:00'); endDt.setMonth(endDt.getMonth()+1);
+  const span=endDt-startDt || 1;
+  const pos=ds=>Math.max(0,Math.min(100, (new Date(ds+'T00:00:00')-startDt)/span*100));
+  const hoy=new Date(); const hoyPct=(hoy>=startDt&&hoy<=endDt)?((hoy-startDt)/span*100):null;
+  const estadoColor=e=> e==='Cerrado'?'var(--muted)':(e==='En pausa'?'var(--warn)':'var(--brand)');
+
+  c.innerHTML=`
+  <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <div class="kpi"><div class="lbl">Proyectos en línea</div><div class="val">${proy.length}</div></div>
+    <div class="kpi"><div class="lbl">Rango</div><div class="val" style="font-size:16px">${fechaLabel(min)} → ${fechaLabel(max)}</div></div>
+    <div class="kpi"><div class="lbl">Activos hoy</div><div class="val pos">${proy.filter(p=>p.inicio<=hoy.toISOString().slice(0,10)&&p.fin>=hoy.toISOString().slice(0,10)).length}</div></div>
+  </div>
+  <div class="panel">
+    <h3>🗓️ Línea de tiempo de proyectos</h3>
+    <div style="overflow-x:auto">
+      <div style="min-width:${Math.max(600,meses.length*90)}px">
+        <div style="display:flex;border-bottom:1px solid var(--line);margin-bottom:8px;padding-left:200px">
+          ${meses.map(m=>`<div style="flex:1;font-size:11px;color:var(--muted);text-align:center;border-left:1px solid var(--line);padding:4px 0">${m}</div>`).join('')}
+        </div>
+        <div style="position:relative">
+          ${hoyPct!=null?`<div style="position:absolute;left:calc(200px + (100% - 200px) * ${hoyPct/100});top:0;bottom:0;width:2px;background:var(--bad);z-index:2" title="Hoy"></div>`:''}
+          ${proy.map(p=>{const l=pos(p.inicio), w=Math.max(1.5,pos(p.fin)-pos(p.inicio));return `
+            <div style="display:flex;align-items:center;height:34px">
+              <div style="width:200px;padding-right:10px;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
+              <div style="position:relative;flex:1;height:100%">
+                <div title="${esc(p.nombre)} · ${fechaLabel(p.inicio)}→${fechaLabel(p.fin)} · ${p.cuentaska||''}"
+                  style="position:absolute;left:${l}%;width:${w}%;top:7px;height:20px;background:${estadoColor(p.estado)};border-radius:5px;display:flex;align-items:center;padding:0 8px;color:#fff;font-size:10.5px;white-space:nowrap;overflow:hidden;cursor:pointer" onclick="STATE._merchTab='proyectos';goView('merch')">${p.dias||diasEntre(p.inicio,p.fin)}d${p.cuentaska?' · '+esc(p.cuentaska):''}</div>
+              </div>
+            </div>`;}).join('')}
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--muted);padding-left:200px">
+          <span style="display:inline-block;width:10px;height:10px;background:var(--brand);border-radius:2px"></span> Activo
+          &nbsp;<span style="display:inline-block;width:10px;height:10px;background:var(--warn);border-radius:2px"></span> En pausa
+          &nbsp;<span style="display:inline-block;width:10px;height:10px;background:var(--muted);border-radius:2px"></span> Cerrado
+          &nbsp;·&nbsp;<span style="color:var(--bad)">▏</span> hoy
+        </div>
+      </div>
+    </div>
+  </div>`;
 }
 
 // ════════ VISTA: CONFIG ════════
