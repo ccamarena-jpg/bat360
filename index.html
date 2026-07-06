@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BAT 360 — Gestión de Cuenta | TT Audit</title>
+<style>
+  :root{
+    --bg:#eef1f6; --panel:#ffffff; --panel2:#f2f5fa; --line:#dde4ee;
+    --txt:#1b2a47; --muted:#6c7a92; --brand:#1d3b78; --brand2:#2d5bb0;
+    --navy:#15264a; --gold:#f4b500; --gold2:#cf9700;
+    --accent:#2d5bb0; --warn:#d6920a; --bad:#d6453d; --good:#1f9d57;
+    --chip:#e7ecf4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
+  a{color:inherit}
+  /* layout */
+  .app{display:flex;min-height:100vh}
+  .side{width:240px;background:var(--navy);position:fixed;top:0;bottom:0;left:0;display:flex;flex-direction:column;padding:18px 0}
+  .brand{padding:0 20px 18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:10px}
+  .brand h1{font-size:18px;letter-spacing:.5px;color:#fff}
+  .brand h1 b{color:var(--gold)}
+  .brand p{font-size:11px;color:#9fb0cc;margin-top:2px}
+  .nav{flex:1;overflow-y:auto}
+  .nav a{display:flex;align-items:center;gap:10px;padding:11px 20px;color:#aeb9d1;cursor:pointer;font-size:13.5px;border-left:3px solid transparent}
+  .nav a:hover{background:rgba(255,255,255,.06);color:#fff}
+  .nav a.active{background:rgba(255,255,255,.09);color:#fff;border-left-color:var(--gold)}
+  .nav a .ico{width:18px;text-align:center}
+  .nav a.soon{opacity:.45;cursor:not-allowed}
+  .nav a.soon::after{content:'pronto';font-size:9px;background:rgba(255,255,255,.12);padding:1px 6px;border-radius:8px;margin-left:auto}
+  .nav .sec{padding:14px 20px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#6d7da0}
+  .main{margin-left:240px;flex:1;padding:24px 30px;max-width:calc(100vw - 240px)}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+  .topbar h2{font-size:22px}
+  .topbar .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--bad)}
+  .dot.on{background:var(--good);box-shadow:0 0 6px var(--good)}
+  /* cards */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(21,38,74,.06);border-top:3px solid var(--gold)}
+  .kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .kpi .val{font-size:24px;font-weight:700;margin-top:6px}
+  .kpi .val.pos{color:var(--good)} .kpi .val.neg{color:var(--bad)}
+  .kpi .hint{font-size:11px;color:var(--muted);margin-top:4px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:20px;box-shadow:0 1px 3px rgba(21,38,74,.05)}
+  .panel h3{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .panel h3 .tag{font-size:11px;color:var(--muted);font-weight:400}
+  /* filters */
+  .filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{font-size:11px;color:var(--muted)}
+  select,input,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:8px;font-size:13px;font-family:inherit}
+  select:focus,input:focus,textarea:focus{outline:none;border-color:var(--brand2)}
+  .btn{background:var(--brand);border:none;color:#fff;padding:9px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600}
+  .btn:hover{background:var(--brand2)}
+  .btn.sec{background:var(--panel2);border:1px solid var(--line)}
+  .btn.sec:hover{background:var(--line)}
+  .btn.danger{background:transparent;color:var(--bad);border:1px solid var(--bad);padding:5px 10px;font-size:12px}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  /* table */
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{background:var(--panel2);text-align:left;padding:10px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);position:sticky;top:0;white-space:nowrap}
+  td{padding:9px 12px;border-top:1px solid var(--line);white-space:nowrap}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .num{text-align:right;font-variant-numeric:tabular-nums}
+  .neg{color:var(--bad)} .pos{color:var(--good)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .pill.Pagado{background:#e0f5e8;color:#16864a}
+  .pill.Facturado{background:#e2ecfb;color:#1d4ed8}
+  .pill.Factura.enviada,.pill.FacturaEnviada{background:#ece6fb;color:#6d28d9}
+  .pill.Programado{background:#fcf0d6;color:#a9760a}
+  .pill.Pendiente{background:#e9edf3;color:#5c6b82}
+  /* bars */
+  .bars{display:flex;flex-direction:column;gap:8px}
+  .bar-row{display:grid;grid-template-columns:140px 1fr 110px;align-items:center;gap:10px;font-size:12px}
+  .bar-track{background:var(--panel2);border-radius:6px;height:20px;overflow:hidden}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--brand),var(--brand2));border-radius:6px}
+  .bar-fill.gold{background:linear-gradient(90deg,var(--gold2),var(--gold))}
+  /* modal */
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;padding:22px}
+  .modal h3{margin-bottom:16px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid2 .field{flex:1}
+  .grid2 .full{grid-column:1/3}
+  .modal .field{margin-bottom:0}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .empty{text-align:center;color:var(--muted);padding:40px 20px}
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--navy);border:1px solid var(--gold);color:#fff;padding:12px 18px;border-radius:10px;z-index:100;opacity:0;transform:translateY(10px);transition:.25s;box-shadow:0 8px 24px rgba(21,38,74,.25)}
+  .toast.show{opacity:1;transform:none}
+  .toast.err{border-color:var(--bad)}
+  .hide{display:none!important}
+  .row-actions{display:flex;gap:6px}
+  .muted{color:var(--muted)}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .tabs button{background:var(--panel2);border:1px solid var(--line);color:var(--muted);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12.5px}
+  .tabs button.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  code{background:var(--panel2);padding:2px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<!-- LOGIN -->
+<div id="login" style="position:fixed;inset:0;z-index:200;background:var(--navy);display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:34px 30px;width:340px;max-width:90vw;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3)">
+    <h1 style="font-size:22px;color:var(--navy)">BAT <b style="color:var(--gold)">360</b></h1>
+    <p style="font-size:12px;color:var(--muted);margin:4px 0 20px">Gestión de cuenta · TT Audit</p>
+    <input id="login-pass" type="password" placeholder="Clave de acceso" autofocus
+      style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')entrar()">
+    <button class="btn" style="width:100%;margin-top:12px" onclick="entrar()">Ingresar</button>
+    <p id="login-err" style="color:var(--bad);font-size:12px;margin-top:10px;display:none">Clave incorrecta</p>
+  </div>
+</div>
+<div class="app" style="display:none" id="appRoot">
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="brand">
+      <h1>BAT <b>360</b></h1>
+      <p>Gestión de cuenta · TT Audit</p>
+    </div>
+    <nav class="nav" id="nav">
+      <div class="sec">Principal</div>
+      <a data-view="resumen" class="active"><span class="ico">📊</span> Resumen</a>
+      <div class="sec">Facturación &amp; Gastos</div>
+      <a data-view="facturacion"><span class="ico">🧾</span> Facturación</a>
+      <a data-view="gastos"><span class="ico">💸</span> Gastos</a>
+      <a data-view="margen"><span class="ico">📈</span> Margen por servicio</a>
+      <div class="sec">Operaciones</div>
+      <a class="soon"><span class="ico">🛒</span> Promotoría</a>
+      <a class="soon"><span class="ico">📦</span> Merch</a>
+      <a class="soon"><span class="ico">🗓️</span> Calendario</a>
+      <div class="sec">Sistema</div>
+      <a data-view="config"><span class="ico">⚙️</span> Configuración</a>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h2 id="view-title">Resumen</h2>
+        <div class="sub" id="view-sub">Visión 360 de la cuenta</div>
+      </div>
+      <div class="status">
+        <span class="dot" id="conn-dot"></span>
+        <span id="conn-txt">Sin conectar</span>
+        <button class="btn sec sm" onclick="cargarTodo()">↻ Actualizar</button>
+      </div>
+    </div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal" id="modal"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════ ESTADO ════════
+// 🔑 Cambia esta clave por la que quieras. Es la que pedirá la pantalla de ingreso.
+const CLAVE = 'BAT360';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnfh98OMw0mVuBIF02OUPrWmCpcyrH7tOaOmtFSY1dmJtxreoiMWudJ1tPiZYS8NgAvA/exec';
+const STATE = {
+  url: localStorage.getItem('bat_url') || GAS_URL,
+  fact: [], gastos: [], maestros: {},
+  view: 'resumen',
+};
+
+const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'];
+
+// ════════ HELPERS ════════
+const $ = s => document.querySelector(s);
+const el = id => document.getElementById(id);
+function money(v){
+  const n = +v || 0;
+  const s = 'S/ ' + Math.abs(n).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return n<0 ? '-'+s : s;
+}
+function mesKey(d){ return (d||'').slice(0,7); }            // YYYY-MM
+function mesLabel(k){ if(!k) return '—'; const [y,m]=k.split('-'); return MESES[(+m)-1]+' '+y; }
+function esc(s){ return (s||'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function toast(msg, err){ const t=el('toast'); t.textContent=msg; t.className='toast show'+(err?' err':''); setTimeout(()=>t.className='toast',2600); }
+
+// ════════ API (mismo patrón que RRHH) ════════
+async function apiGet(accion, params={}){
+  if(!STATE.url) throw new Error('Configura la URL de Apps Script.');
+  const qs = new URLSearchParams({accion,...params}).toString();
+  const res = await fetch(`${STATE.url}?${qs}`);
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  const j = await res.json();
+  if(j.error) throw new Error(j.error);
+  return j;
+}
+async function apiPost(body){
+  if(!STATE.url) throw new Error('Configura la URL de Apps Script.');
+  const res = await fetch(STATE.url,{method:'POST',body:JSON.stringify(body)});
+  try{ return await res.json(); }catch(e){ return {ok:true}; }
+}
+
+async function cargarTodo(){
+  if(!STATE.url){ setConn(false,'Sin configurar'); render(); return; }
+  setConn(false,'Cargando…');
+  try{
+    const [f,g,m] = await Promise.all([
+      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMaestros')
+    ]);
+    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.maestros = m.maestros||{};
+    setConn(true, `${STATE.fact.length} facturas · ${STATE.gastos.length} gastos`);
+    render();
+  }catch(e){ setConn(false,'Error'); toast(e.message,true); render(); }
+}
+function setConn(ok,txt){ el('conn-dot').className='dot'+(ok?' on':''); el('conn-txt').textContent=txt; }
+
+// ════════ NAV ════════
+const TITLES = {
+  resumen:['Resumen','Visión 360 de la cuenta'],
+  facturacion:['Facturación','Facturas por cliente y servicio'],
+  gastos:['Gastos','Costos por servicio para el margen'],
+  margen:['Margen por servicio','Facturación − Gastos = Margen'],
+  config:['Configuración','Conexión con Google Sheets'],
+};
+document.getElementById('nav').addEventListener('click',e=>{
+  const a=e.target.closest('a'); if(!a||a.classList.contains('soon')||!a.dataset.view) return;
+  document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('active'));
+  a.classList.add('active');
+  STATE.view=a.dataset.view;
+  el('view-title').textContent=TITLES[STATE.view][0];
+  el('view-sub').textContent=TITLES[STATE.view][1];
+  render();
+});
+
+// ════════ RENDER ════════
+function render(){
+  const c = el('content');
+  if(STATE.view!=='config' && !STATE.url){
+    c.innerHTML = `<div class="panel"><div class="empty">
+      <h3 style="justify-content:center">⚙️ Conecta tu Google Sheet primero</h3>
+      <p class="muted" style="margin:10px 0 16px">Ve a <b>Configuración</b> y pega la URL de tu Apps Script.</p>
+      <button class="btn" onclick="goView('config')">Ir a Configuración</button>
+    </div></div>`;
+    return;
+  }
+  if(STATE.view==='resumen') renderResumen(c);
+  else if(STATE.view==='facturacion') renderFacturacion(c);
+  else if(STATE.view==='gastos') renderGastos(c);
+  else if(STATE.view==='margen') renderMargen(c);
+  else if(STATE.view==='config') renderConfig(c);
+}
+function goView(v){ document.querySelector(`.nav a[data-view="${v}"]`).click(); }
+
+// ════════ AGREGACIÓN (margen) ════════
+function aniosDisponibles(){
+  const s=new Set();
+  STATE.fact.forEach(f=>{ if(f.mes) s.add(f.mes.slice(0,4)); });
+  STATE.gastos.forEach(g=>{ if(g.mes) s.add(g.mes.slice(0,4)); });
+  return [...s].filter(Boolean).sort().reverse();
+}
+// devuelve mapa por cliente|servicio|mes -> {fact, personas, otros}
+function aggMargen(filtro={}){
+  const map={};
+  const k=(c,s,m)=>`${c}|||${s}|||${m}`;
+  STATE.fact.forEach(f=>{
+    if(filtro.anio && (f.mes||'').slice(0,4)!==filtro.anio) return;
+    if(filtro.cliente && f.cliente!==filtro.cliente) return;
+    const key=k(f.cliente, f.tipo||'(sin servicio)', mesKey(f.mes));
+    (map[key]=map[key]||{cliente:f.cliente,servicio:f.tipo||'(sin servicio)',mes:mesKey(f.mes),fact:0,personas:0,otros:0});
+    map[key].fact += +f.importe||0;
+  });
+  STATE.gastos.forEach(g=>{
+    if(filtro.anio && (g.mes||'').slice(0,4)!==filtro.anio) return;
+    if(filtro.cliente && g.cliente!==filtro.cliente) return;
+    const key=k(g.cliente, g.tipo||'(sin servicio)', mesKey(g.mes));
+    (map[key]=map[key]||{cliente:g.cliente,servicio:g.tipo||'(sin servicio)',mes:mesKey(g.mes),fact:0,personas:0,otros:0});
+    if((g.grupo||'').toLowerCase().startsWith('person')) map[key].personas += +g.monto||0;
+    else map[key].otros += +g.monto||0;
+  });
+  return Object.values(map);
+}
+
+// ════════ VISTA: RESUMEN ════════
+function renderResumen(c){
+  const anios=aniosDisponibles();
+  const anio = STATE._anioRes || anios[0] || '';
+  STATE._anioRes = anio;
+  const ag = aggMargen({anio});
+  const tFact = ag.reduce((a,b)=>a+b.fact,0);
+  const tGas = ag.reduce((a,b)=>a+b.personas+b.otros,0);
+  const margen = tFact - tGas;
+  const pct = tFact? (margen/tFact*100):0;
+
+  // facturado por mes
+  const porMes={};
+  ag.forEach(r=>{ porMes[r.mes]=(porMes[r.mes]||0)+r.fact; });
+  const mesesOrd=Object.keys(porMes).sort();
+  const maxMes=Math.max(1,...Object.values(porMes));
+  // facturado por servicio
+  const porServ={};
+  ag.forEach(r=>{ porServ[r.servicio]=(porServ[r.servicio]||0)+r.fact; });
+  const servOrd=Object.entries(porServ).sort((a,b)=>b[1]-a[1]);
+  const maxServ=Math.max(1,...Object.values(porServ));
+
+  c.innerHTML = `
+  <div class="filters">
+    <div class="field"><label>Año</label>
+      <select onchange="STATE._anioRes=this.value;render()">${anios.map(a=>`<option ${a===anio?'selected':''}>${a}</option>`).join('')}</select>
+    </div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">Facturado ${anio}</div><div class="val">${money(tFact)}</div><div class="hint">${ag.length} líneas servicio·mes</div></div>
+    <div class="kpi"><div class="lbl">Gastos registrados</div><div class="val">${money(tGas)}</div><div class="hint">${tFact?((tGas/tFact*100).toFixed(0)):0}% de lo facturado</div></div>
+    <div class="kpi"><div class="lbl">Margen</div><div class="val ${margen>=0?'pos':'neg'}">${money(margen)}</div><div class="hint">Facturado − Gastos</div></div>
+    <div class="kpi"><div class="lbl">% Margen</div><div class="val ${pct>=0?'pos':'neg'}">${pct.toFixed(1)}%</div><div class="hint">${tGas===0?'⚠ faltan gastos':'sobre facturación'}</div></div>
+  </div>
+
+  <div class="panel">
+    <h3>🧾 Facturación por mes <span class="tag">${anio}</span></h3>
+    <div class="bars">
+      ${mesesOrd.map(m=>`<div class="bar-row"><span>${mesLabel(m)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:${porMes[m]/maxMes*100}%"></div></div>
+        <span class="num">${money(porMes[m])}</span></div>`).join('') || '<div class="empty">Sin datos</div>'}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>📦 Facturación por servicio <span class="tag">${anio}</span></h3>
+    <div class="bars">
+      ${servOrd.map(([s,v])=>`<div class="bar-row"><span title="${esc(s)}">${esc(s.length>18?s.slice(0,17)+'…':s)}</span>
+        <div class="bar-track"><div class="bar-fill gold" style="width:${v/maxServ*100}%"></div></div>
+        <span class="num">${money(v)}</span></div>`).join('') || '<div class="empty">Sin datos</div>'}
+    </div>
+  </div>`;
+}
+
+// ════════ VISTA: FACTURACIÓN ════════
+function facturacionFiltrada(){
+  const f=STATE._fFil||{};
+  return STATE.fact.filter(r=>{
+    if(f.cliente && r.cliente!==f.cliente) return false;
+    if(f.servicio && r.tipo!==f.servicio) return false;
+    if(f.estado && r.estado!==f.estado) return false;
+    if(f.anio && (r.mes||'').slice(0,4)!==f.anio) return false;
+    if(f.mes && mesKey(r.mes)!==f.mes) return false;
+    if(f.q){ const q=f.q.toLowerCase(); if(!(`${r.servicio} ${r.factura} ${r.responsable} ${r.os}`.toLowerCase().includes(q))) return false; }
+    return true;
+  });
+}
+function renderFacturacion(c){
+  STATE._fFil = STATE._fFil||{};
+  const f=STATE._fFil;
+  const opts=(arr,sel)=>['<option value="">Todos</option>'].concat((arr||[]).map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`)).join('');
+  const anios=aniosDisponibles();
+  const mesesDe = anios.length? [...new Set(STATE.fact.filter(r=>!f.anio||r.mes.slice(0,4)===f.anio).map(r=>mesKey(r.mes)))].filter(Boolean).sort() : [];
+  const rows=facturacionFiltrada();
+  const total=rows.reduce((a,b)=>a+(+b.importe||0),0);
+
+  c.innerHTML=`
+  <div class="filters">
+    <div class="field"><label>Cliente</label><select onchange="setFFil('cliente',this.value)">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
+    <div class="field"><label>Servicio</label><select onchange="setFFil('servicio',this.value)">${opts(STATE.maestros.Servicio,f.servicio)}</select></div>
+    <div class="field"><label>Estado</label><select onchange="setFFil('estado',this.value)">${opts(STATE.maestros.Estado,f.estado)}</select></div>
+    <div class="field"><label>Año</label><select onchange="setFFil('anio',this.value)">${opts(anios,f.anio)}</select></div>
+    <div class="field"><label>Mes</label><select onchange="setFFil('mes',this.value)"><option value="">Todos</option>${mesesDe.map(m=>`<option value="${m}" ${m===f.mes?'selected':''}>${mesLabel(m)}</option>`).join('')}</select></div>
+    <div class="field" style="flex:1;min-width:160px"><label>Buscar</label><input placeholder="servicio, factura, responsable…" value="${esc(f.q||'')}" oninput="setFFil('q',this.value)"></div>
+    <button class="btn" onclick="abrirFactura()">+ Nueva factura</button>
+  </div>
+  <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <div class="kpi"><div class="lbl">Facturas filtradas</div><div class="val">${rows.length}</div></div>
+    <div class="kpi"><div class="lbl">Importe total</div><div class="val ${total<0?'neg':''}">${money(total)}</div></div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Cliente</th><th>Servicio (Tipo)</th><th>Servicio / Proyecto</th><th>Mes</th><th class="num">Importe</th><th>Responsable</th><th>Factura</th><th>Estado</th><th></th></tr></thead>
+    <tbody>${rows.length? rows.map(r=>`<tr>
+      <td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td>
+      <td title="${esc(r.servicio)}">${esc(r.servicio.length>34?r.servicio.slice(0,33)+'…':r.servicio)}</td>
+      <td>${mesLabel(mesKey(r.mes))}</td>
+      <td class="num ${(+r.importe<0)?'neg':''}">${money(r.importe)}</td>
+      <td>${esc(r.responsable)}</td>
+      <td>${esc(r.serie)} ${esc(r.factura)}</td>
+      <td><span class="pill ${esc((r.estado||'').replace(/ /g,'.'))}">${esc(r.estado||'—')}</span></td>
+      <td><div class="row-actions">
+        <button class="btn sec sm" onclick='abrirFactura(${JSON.stringify(r.id)})'>✎</button>
+        <button class="btn danger" onclick='borrarFactura(${JSON.stringify(r.id)})'>🗑</button>
+      </div></td>
+    </tr>`).join('') : `<tr><td colspan="9"><div class="empty">No hay facturas con esos filtros</div></td></tr>`}</tbody>
+  </table></div>`;
+}
+function setFFil(k,v){ STATE._fFil[k]=v; if(k==='anio') STATE._fFil.mes=''; renderFacturacion(el('content')); }
+
+function abrirFactura(id){
+  const r = id? STATE.fact.find(x=>x.id===id) : {};
+  const sel=(arr,v)=>(arr||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('');
+  showModal(`
+    <h3>${id?'Editar':'Nueva'} factura</h3>
+    <div class="grid2">
+      <div class="field"><label>Cliente</label><select id="m_cliente">${sel(STATE.maestros.Cliente,r.cliente)}</select></div>
+      <div class="field"><label>Servicio (Tipo)</label><select id="m_tipo">${sel(STATE.maestros.Servicio,r.tipo)}</select></div>
+      <div class="field full"><label>Servicio / Proyecto (detalle)</label><input id="m_serv" value="${esc(r.servicio||'')}"></div>
+      <div class="field"><label>Mes</label><input type="month" id="m_mes" value="${mesKey(r.mes)||''}"></div>
+      <div class="field"><label>Importe (S/)</label><input type="number" step="0.01" id="m_imp" value="${r.importe!=null?r.importe:''}"></div>
+      <div class="field"><label>Responsable de pago</label><select id="m_resp"><option value=""></option>${sel(STATE.maestros.Responsable,r.responsable)}</select></div>
+      <div class="field"><label>Estado</label><select id="m_estado">${sel(STATE.maestros.Estado,r.estado||'Pendiente')}</select></div>
+      <div class="field"><label>Serie</label><input id="m_serie" value="${esc(r.serie||'')}"></div>
+      <div class="field"><label># Factura</label><input id="m_fact" value="${esc(r.factura||'')}"></div>
+      <div class="field"><label>OS</label><input id="m_os" value="${esc(r.os||'')}"></div>
+      <div class="field"><label>Fecha factura</label><input type="date" id="m_ff" value="${r.fechaFactura||''}"></div>
+      <div class="field"><label>Detalle estado</label><input id="m_ed" value="${esc(r.estadoDetalle||'')}" placeholder="ej. Pagado 14.05"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn sec" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" onclick='guardarFactura(${JSON.stringify(id||"")})'>Guardar</button>
+    </div>`);
+}
+async function guardarFactura(id){
+  const body={accion:'saveFacturacion', id:id||'',
+    cliente:el('m_cliente').value, tipo:el('m_tipo').value, servicio:el('m_serv').value,
+    mes:(el('m_mes').value||'')+(el('m_mes').value?'-01':''), importe:el('m_imp').value,
+    responsable:el('m_resp').value, estado:el('m_estado').value, serie:el('m_serie').value,
+    factura:el('m_fact').value, os:el('m_os').value, fechaFactura:el('m_ff').value,
+    estadoDetalle:el('m_ed').value};
+  if(!body.cliente){ toast('Cliente requerido',true); return; }
+  cerrarModal();
+  try{ await apiPost(body); toast('Factura guardada'); await cargarTodo(); goView('facturacion'); }
+  catch(e){ toast(e.message,true); }
+}
+async function borrarFactura(id){
+  if(!confirm('¿Borrar esta factura?')) return;
+  try{ await apiPost({accion:'deleteFacturacion',id}); toast('Factura borrada'); await cargarTodo(); goView('facturacion'); }
+  catch(e){ toast(e.message,true); }
+}
+
+// ════════ VISTA: GASTOS ════════
+function renderGastos(c){
+  STATE._gFil = STATE._gFil||{};
+  const f=STATE._gFil;
+  const opts=(arr,sel)=>['<option value="">Todos</option>'].concat((arr||[]).map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`)).join('');
+  const anios=aniosDisponibles();
+  let rows=STATE.gastos.filter(r=>{
+    if(f.cliente&&r.cliente!==f.cliente) return false;
+    if(f.servicio&&r.tipo!==f.servicio) return false;
+    if(f.anio&&(r.mes||'').slice(0,4)!==f.anio) return false;
+    return true;
+  });
+  const tPers=rows.filter(r=>(r.grupo||'').toLowerCase().startsWith('person')).reduce((a,b)=>a+(+b.monto||0),0);
+  const tOtros=rows.reduce((a,b)=>a+(+b.monto||0),0)-tPers;
+
+  c.innerHTML=`
+  <div class="filters">
+    <div class="field"><label>Cliente</label><select onchange="STATE._gFil.cliente=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
+    <div class="field"><label>Servicio</label><select onchange="STATE._gFil.servicio=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Servicio,f.servicio)}</select></div>
+    <div class="field"><label>Año</label><select onchange="STATE._gFil.anio=this.value;renderGastos(el('content'))">${opts(anios,f.anio)}</select></div>
+    <button class="btn" onclick="abrirGasto()">+ Nuevo gasto</button>
+  </div>
+  <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+    <div class="kpi"><div class="lbl">Gasto Personas</div><div class="val">${money(tPers)}</div></div>
+    <div class="kpi"><div class="lbl">Otros Gastos</div><div class="val">${money(tOtros)}</div></div>
+    <div class="kpi"><div class="lbl">Total gastos</div><div class="val">${money(tPers+tOtros)}</div></div>
+  </div>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Cliente</th><th>Servicio</th><th>Mes</th><th>Grupo</th><th>Categoría</th><th class="num">Monto</th><th>Detalle</th><th></th></tr></thead>
+    <tbody>${rows.length? rows.map(r=>`<tr>
+      <td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${mesLabel(mesKey(r.mes))}</td>
+      <td>${esc(r.grupo)}</td><td>${esc(r.categoria)}</td>
+      <td class="num">${money(r.monto)}</td><td>${esc(r.detalle)}</td>
+      <td><div class="row-actions">
+        <button class="btn sec sm" onclick='abrirGasto(${JSON.stringify(r.id)})'>✎</button>
+        <button class="btn danger" onclick='borrarGasto(${JSON.stringify(r.id)})'>🗑</button>
+      </div></td></tr>`).join('') : `<tr><td colspan="8"><div class="empty">Aún no registras gastos. Agrégalos para calcular el margen real.</div></td></tr>`}</tbody>
+  </table></div>`;
+}
+function abrirGasto(id){
+  const r=id? STATE.gastos.find(x=>x.id===id):{grupo:'Otros'};
+  const sel=(arr,v)=>(arr||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('');
+  const cats = (r.grupo||'Otros').toLowerCase().startsWith('person')? STATE.maestros.CatPersonas : STATE.maestros.CatOtros;
+  showModal(`
+    <h3>${id?'Editar':'Nuevo'} gasto</h3>
+    <div class="grid2">
+      <div class="field"><label>Cliente</label><select id="g_cliente">${sel(STATE.maestros.Cliente,r.cliente)}</select></div>
+      <div class="field"><label>Servicio</label><select id="g_tipo">${sel(STATE.maestros.Servicio,r.tipo)}</select></div>
+      <div class="field"><label>Mes</label><input type="month" id="g_mes" value="${mesKey(r.mes)||''}"></div>
+      <div class="field"><label>Grupo</label><select id="g_grupo" onchange="cambiarGrupoGasto()"><option ${((r.grupo||'').toLowerCase().startsWith('person'))?'selected':''}>Personas</option><option ${(!(r.grupo||'').toLowerCase().startsWith('person'))?'selected':''}>Otros</option></select></div>
+      <div class="field"><label>Categoría</label><select id="g_cat">${sel(cats,r.categoria)}</select></div>
+      <div class="field"><label>Monto (S/)</label><input type="number" step="0.01" id="g_monto" value="${r.monto!=null?r.monto:''}"></div>
+      <div class="field full"><label>Detalle</label><input id="g_det" value="${esc(r.detalle||'')}"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn sec" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn" onclick='guardarGasto(${JSON.stringify(id||"")})'>Guardar</button>
+    </div>`);
+}
+function cambiarGrupoGasto(){
+  const g=el('g_grupo').value;
+  const cats = g.toLowerCase().startsWith('person')? STATE.maestros.CatPersonas : STATE.maestros.CatOtros;
+  el('g_cat').innerHTML=(cats||[]).map(o=>`<option>${esc(o)}</option>`).join('');
+}
+async function guardarGasto(id){
+  const body={accion:'saveGasto', id:id||'', cliente:el('g_cliente').value, tipo:el('g_tipo').value,
+    mes:(el('g_mes').value||'')+(el('g_mes').value?'-01':''), grupo:el('g_grupo').value,
+    categoria:el('g_cat').value, monto:el('g_monto').value, detalle:el('g_det').value};
+  if(!body.cliente||!body.tipo||!el('g_mes').value){ toast('Cliente, servicio y mes requeridos',true); return; }
+  cerrarModal();
+  try{ await apiPost(body); toast('Gasto guardado'); await cargarTodo(); goView('gastos'); }
+  catch(e){ toast(e.message,true); }
+}
+async function borrarGasto(id){
+  if(!confirm('¿Borrar este gasto?')) return;
+  try{ await apiPost({accion:'deleteGasto',id}); toast('Gasto borrado'); await cargarTodo(); goView('gastos'); }
+  catch(e){ toast(e.message,true); }
+}
+
+// ════════ VISTA: MARGEN ════════
+function renderMargen(c){
+  STATE._mFil=STATE._mFil||{};
+  const f=STATE._mFil;
+  const anios=aniosDisponibles();
+  const anio=f.anio||anios[0]||'';
+  f.anio=anio;
+  const opts=(arr,sel)=>['<option value="">Todos</option>'].concat((arr||[]).map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`)).join('');
+  let ag=aggMargen({anio, cliente:f.cliente});
+
+  // resumen por servicio (agregando meses)
+  const porServ={};
+  ag.forEach(r=>{
+    const k=r.cliente+' · '+r.servicio;
+    (porServ[k]=porServ[k]||{cliente:r.cliente,servicio:r.servicio,fact:0,personas:0,otros:0});
+    porServ[k].fact+=r.fact; porServ[k].personas+=r.personas; porServ[k].otros+=r.otros;
+  });
+  const serv=Object.values(porServ).sort((a,b)=>b.fact-a.fact);
+  const tF=serv.reduce((a,b)=>a+b.fact,0), tP=serv.reduce((a,b)=>a+b.personas,0), tO=serv.reduce((a,b)=>a+b.otros,0);
+  const tM=tF-tP-tO;
+
+  const detalle = ag.sort((a,b)=> a.mes<b.mes?1:-1 || (b.fact-a.fact));
+
+  c.innerHTML=`
+  <div class="filters">
+    <div class="field"><label>Año</label><select onchange="STATE._mFil.anio=this.value;renderMargen(el('content'))">${opts(anios,anio).replace('<option value="">Todos</option>','')}</select></div>
+    <div class="field"><label>Cliente</label><select onchange="STATE._mFil.cliente=this.value;renderMargen(el('content'))">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
+  </div>
+  <div class="kpis">
+    <div class="kpi"><div class="lbl">Facturado</div><div class="val">${money(tF)}</div></div>
+    <div class="kpi"><div class="lbl">Gasto Personas</div><div class="val">${money(tP)}</div></div>
+    <div class="kpi"><div class="lbl">Otros Gastos</div><div class="val">${money(tO)}</div></div>
+    <div class="kpi"><div class="lbl">Margen</div><div class="val ${tM>=0?'pos':'neg'}">${money(tM)} <span style="font-size:13px">(${tF?(tM/tF*100).toFixed(1):0}%)</span></div></div>
+  </div>
+
+  <div class="panel">
+    <h3>📊 Margen por servicio <span class="tag">${anio} · acumulado</span></h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Cliente</th><th>Servicio</th><th class="num">Facturado</th><th class="num">G. Personas</th><th class="num">Otros</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
+      <tbody>${serv.map(r=>{const m=r.fact-r.personas-r.otros;const p=r.fact?m/r.fact*100:0;return `<tr>
+        <td>${esc(r.cliente)}</td><td>${esc(r.servicio)}</td>
+        <td class="num">${money(r.fact)}</td><td class="num">${money(r.personas)}</td><td class="num">${money(r.otros)}</td>
+        <td class="num ${m>=0?'pos':'neg'}">${money(m)}</td><td class="num ${p>=0?'pos':'neg'}">${p.toFixed(1)}%</td></tr>`;}).join('')||'<tr><td colspan="7"><div class="empty">Sin datos</div></td></tr>'}</tbody>
+    </table></div>
+    <p class="muted" style="margin-top:10px;font-size:11.5px">⚠ El margen solo es real cuando cargas los gastos en el módulo <b>Gastos</b>. Hoy tienes ${STATE.gastos.length} gastos registrados.</p>
+  </div>
+
+  <div class="panel">
+    <h3>📅 Detalle por mes</h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Mes</th><th>Cliente</th><th>Servicio</th><th class="num">Facturado</th><th class="num">Gastos</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
+      <tbody>${detalle.map(r=>{const g=r.personas+r.otros;const m=r.fact-g;const p=r.fact?m/r.fact*100:0;return `<tr>
+        <td>${mesLabel(r.mes)}</td><td>${esc(r.cliente)}</td><td>${esc(r.servicio)}</td>
+        <td class="num">${money(r.fact)}</td><td class="num">${money(g)}</td>
+        <td class="num ${m>=0?'pos':'neg'}">${money(m)}</td><td class="num ${p>=0?'pos':'neg'}">${p.toFixed(1)}%</td></tr>`;}).join('')||'<tr><td colspan="7"><div class="empty">Sin datos</div></td></tr>'}</tbody>
+    </table></div>
+  </div>`;
+}
+
+// ════════ VISTA: CONFIG ════════
+function renderConfig(c){
+  c.innerHTML=`
+  <div class="panel" style="max-width:680px">
+    <h3>⚙️ Conexión con Google Sheets</h3>
+    <div class="field" style="margin-bottom:14px">
+      <label>URL del Apps Script (termina en /exec)</label>
+      <input id="cfg_url" value="${esc(STATE.url)}" placeholder="https://script.google.com/macros/s/.../exec">
+    </div>
+    <button class="btn" onclick="guardarUrl()">Guardar y conectar</button>
+    <button class="btn sec" onclick="cargarTodo()">Probar conexión</button>
+    <hr style="border-color:var(--line);margin:20px 0">
+    <h3>📋 Pasos para activar</h3>
+    <ol class="muted" style="padding-left:18px;line-height:1.9;font-size:13px">
+      <li>Crea un Google Sheet nuevo: <b>"BAT - Facturación y Gastos"</b>.</li>
+      <li>Extensiones → Apps Script → pega el código de <code>bat/gas/Codigo.gs</code>.</li>
+      <li>Ejecuta <code>initSheets()</code> una vez (crea pestañas y catálogos).</li>
+      <li>Importa <code>bat/data/facturacion_historico.csv</code> en la pestaña <b>Facturacion</b> (Archivo → Importar → Reemplazar datos en hoja actual).</li>
+      <li>Implementar → Nueva implementación → App web → Acceso: <b>Cualquiera</b>.</li>
+      <li>Copia la URL <code>/exec</code> y pégala arriba.</li>
+    </ol>
+  </div>`;
+}
+function guardarUrl(){
+  STATE.url=el('cfg_url').value.trim();
+  localStorage.setItem('bat_url',STATE.url);
+  toast('URL guardada'); cargarTodo();
+}
+
+// ════════ MODAL ════════
+function showModal(html){ el('modal').innerHTML=html; el('modal-bg').classList.add('show'); }
+function cerrarModal(){ el('modal-bg').classList.remove('show'); }
+el('modal-bg').addEventListener('click',e=>{ if(e.target.id==='modal-bg') cerrarModal(); });
+
+// ════════ LOGIN ════════
+function entrar(){
+  const v = el('login-pass').value;
+  if(v === CLAVE){
+    sessionStorage.setItem('bat_auth','1');
+    mostrarApp();
+  } else {
+    el('login-err').style.display='block';
+    el('login-pass').value='';
+    el('login-pass').focus();
+  }
+}
+function mostrarApp(){
+  el('login').style.display='none';
+  el('appRoot').style.display='flex';
+  cargarTodo();
+}
+
+// ════════ INIT ════════
+if(sessionStorage.getItem('bat_auth')==='1') mostrarApp();
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Data real / financiera — NO publicar. Vive en Google Sheets.
+data/
+*.csv
+*.xlsx
+
+# Sistema
+.DS_Store
+Thumbs.db
