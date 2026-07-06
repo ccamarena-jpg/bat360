@@ -757,9 +757,9 @@ function renderProyectos(c){
   <div class="panel">
     <h3>📋 Proyectos actuales</h3>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Proyecto</th><th>Inicio</th><th>Fin</th><th class="num">Días</th><th class="num">Personal</th><th>Ciudades</th><th>Cuentas KA</th><th class="num">Efectiv.</th><th class="num">Cobert.</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Proyecto</th><th>Responsable</th><th>Inicio</th><th>Fin</th><th class="num">Días</th><th class="num">Personal</th><th>Ciudades</th><th>Cuentas KA</th><th class="num">Efectiv.</th><th class="num">Cobert.</th><th>Estado</th><th></th></tr></thead>
       <tbody>${proy.map(p=>`<tr>
-        <td><b>${esc(p.nombre)}</b></td><td>${fechaLabel(p.inicio)}</td><td>${fechaLabel(p.fin)}</td>
+        <td><b>${esc(p.nombre)}</b></td><td>${esc(p.responsable)||'<span class="muted">—</span>'}</td><td>${fechaLabel(p.inicio)}</td><td>${fechaLabel(p.fin)}</td>
         <td class="num">${p.dias||diasEntre(p.inicio,p.fin)||'·'}</td><td class="num">${p.personal||'·'}</td>
         <td style="white-space:normal;max-width:170px">${esc(p.ciudades)}</td><td style="white-space:normal;max-width:170px">${esc(p.cuentaska)}</td>
         <td class="num ${p.efectividad>=80?'pos':''}">${(p.efectividad!=null&&p.efectividad!=='')?p.efectividad+'%':'·'}</td>
@@ -785,6 +785,8 @@ function abrirProyecto(id){
     <h3>${id?'Editar':'Nuevo'} proyecto</h3>
     <div class="grid2">
       <div class="field full"><label>Nombre del proyecto</label><input id="p_nom" value="${esc(p.nombre||'')}"></div>
+      <div class="field full"><label>Responsable</label><input id="p_resp" list="resp-list" value="${esc(p.responsable||'')}" placeholder="Nombre del responsable del equipo">
+        <datalist id="resp-list">${[...new Set(STATE.proyectos.map(x=>x.responsable).filter(Boolean))].map(x=>`<option>${esc(x)}</option>`).join('')}</datalist></div>
       <div class="field"><label>Fecha inicio</label><input type="date" id="p_ini" value="${p.inicio||''}" onchange="calcDias()"></div>
       <div class="field"><label>Fecha fin</label><input type="date" id="p_fin" value="${p.fin||''}" onchange="calcDias()"></div>
       <div class="field"><label>Días (automático)</label><input id="p_dias" value="${p.dias||diasEntre(p.inicio,p.fin)||''}" readonly></div>
@@ -820,7 +822,7 @@ async function guardarProyecto(id){
   const body={accion:'saveProyecto', id:id||'', nombre:el('p_nom').value, inicio:el('p_ini').value, fin:el('p_fin').value,
     dias:diasEntre(el('p_ini').value,el('p_fin').value), personal:el('p_pers').value||0, ciudades:el('p_ciu').value,
     cuentaska:el('p_ka').value, efectividad:el('p_ef').value||0, cobertura:el('p_cob').value||0,
-    avances:fmtAvances(avs), estado:el('p_est').value, obs:el('p_obs').value};
+    avances:fmtAvances(avs), estado:el('p_est').value, obs:el('p_obs').value, responsable:el('p_resp').value};
   if(!body.nombre){ toast('Nombre requerido',true); return; }
   cerrarModal();
   try{ await apiPost(body); toast('Proyecto guardado'); await cargarTodo(); STATE._merchTab='proyectos'; goView('merch'); }
@@ -850,11 +852,14 @@ function renderCalendario(c){
   const span=endDt-startDt || 1;
   const pos=ds=>Math.max(0,Math.min(100, (new Date(ds+'T00:00:00')-startDt)/span*100));
   const hoy=new Date(); const hoyPct=(hoy>=startDt&&hoy<=endDt)?((hoy-startDt)/span*100):null;
-  const estadoColor=e=> e==='Cerrado'?'var(--muted)':(e==='En pausa'?'var(--warn)':'var(--brand)');
+  const PALETA=['#1d3b78','#f4b500','#2b9e5b','#d6453d','#7c3aed','#0891b2','#db2777','#ea580c','#0d9488','#9333ea'];
+  const resps=[...new Set(proy.map(p=>p.responsable||'Sin responsable'))];
+  const colorFor=r=>PALETA[Math.max(0,resps.indexOf(r||'Sin responsable'))%PALETA.length];
+  const grupos={}; resps.forEach(r=>grupos[r]=[]); proy.forEach(p=>grupos[p.responsable||'Sin responsable'].push(p));
 
   c.innerHTML=`
   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-    <div class="kpi"><div class="lbl">Proyectos en línea</div><div class="val">${proy.length}</div></div>
+    <div class="kpi"><div class="lbl">Proyectos en línea</div><div class="val">${proy.length}</div><div class="hint">${resps.length} responsable(s)</div></div>
     <div class="kpi"><div class="lbl">Rango</div><div class="val" style="font-size:16px">${fechaLabel(min)} → ${fechaLabel(max)}</div></div>
     <div class="kpi"><div class="lbl">Activos hoy</div><div class="val pos">${proy.filter(p=>p.inicio<=hoy.toISOString().slice(0,10)&&p.fin>=hoy.toISOString().slice(0,10)).length}</div></div>
   </div>
@@ -867,20 +872,25 @@ function renderCalendario(c){
         </div>
         <div style="position:relative">
           ${hoyPct!=null?`<div style="position:absolute;left:calc(200px + (100% - 200px) * ${hoyPct/100});top:0;bottom:0;width:2px;background:var(--bad);z-index:2" title="Hoy"></div>`:''}
-          ${proy.map(p=>{const l=pos(p.inicio), w=Math.max(1.5,pos(p.fin)-pos(p.inicio));return `
-            <div style="display:flex;align-items:center;height:34px">
-              <div style="width:200px;padding-right:10px;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
+          ${resps.map(r=>`
+            <div style="display:flex;align-items:center;height:24px;margin-top:8px">
+              <div style="width:200px;font-size:11px;font-weight:700;color:${colorFor(r)};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                <span style="display:inline-block;width:9px;height:9px;background:${colorFor(r)};border-radius:2px;margin-right:6px"></span>${esc(r)}</div>
+              <div style="flex:1;border-bottom:1px dashed var(--line)"></div>
+            </div>
+            ${grupos[r].map(p=>{const l=pos(p.inicio), w=Math.max(1.5,pos(p.fin)-pos(p.inicio)); const cer=p.estado==='Cerrado';return `
+            <div style="display:flex;align-items:center;height:32px">
+              <div style="width:200px;padding-left:15px;padding-right:10px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.nombre)}">${esc(p.nombre)}</div>
               <div style="position:relative;flex:1;height:100%">
-                <div title="${esc(p.nombre)} · ${fechaLabel(p.inicio)}→${fechaLabel(p.fin)} · ${p.cuentaska||''}"
-                  style="position:absolute;left:${l}%;width:${w}%;top:7px;height:20px;background:${estadoColor(p.estado)};border-radius:5px;display:flex;align-items:center;padding:0 8px;color:#fff;font-size:10.5px;white-space:nowrap;overflow:hidden;cursor:pointer" onclick="STATE._merchTab='proyectos';goView('merch')">${p.dias||diasEntre(p.inicio,p.fin)}d${p.cuentaska?' · '+esc(p.cuentaska):''}</div>
+                <div title="${esc(p.nombre)} · ${fechaLabel(p.inicio)}→${fechaLabel(p.fin)} · ${esc(p.cuentaska||'')} · ${esc(p.estado||'')}"
+                  style="position:absolute;left:${l}%;width:${w}%;top:6px;height:20px;background:${colorFor(r)};opacity:${cer?0.45:1};border-radius:5px;display:flex;align-items:center;padding:0 8px;color:#fff;font-size:10.5px;white-space:nowrap;overflow:hidden;cursor:pointer" onclick="STATE._merchTab='proyectos';goView('merch')">${p.dias||diasEntre(p.inicio,p.fin)}d${p.cuentaska?' · '+esc(p.cuentaska):''}</div>
               </div>
             </div>`;}).join('')}
+          `).join('')}
         </div>
-        <div style="margin-top:10px;font-size:11px;color:var(--muted);padding-left:200px">
-          <span style="display:inline-block;width:10px;height:10px;background:var(--brand);border-radius:2px"></span> Activo
-          &nbsp;<span style="display:inline-block;width:10px;height:10px;background:var(--warn);border-radius:2px"></span> En pausa
-          &nbsp;<span style="display:inline-block;width:10px;height:10px;background:var(--muted);border-radius:2px"></span> Cerrado
-          &nbsp;·&nbsp;<span style="color:var(--bad)">▏</span> hoy
+        <div style="margin-top:12px;font-size:11px;color:var(--muted);padding-left:200px;display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+          ${resps.map(r=>`<span><span style="display:inline-block;width:10px;height:10px;background:${colorFor(r)};border-radius:2px;margin-right:4px"></span>${esc(r)}</span>`).join('')}
+          <span>· barra tenue = cerrado · <span style="color:var(--bad)">▏</span> hoy</span>
         </div>
       </div>
     </div>

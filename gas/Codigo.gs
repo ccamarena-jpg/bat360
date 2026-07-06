@@ -24,7 +24,7 @@ const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
 const HDR_GASTOS   = ['ID','Cliente','Tipo de SS','Mes','Grupo','Categoria','Monto','Detalle'];
 const HDR_MAESTROS = ['Tipo','Valor'];
 const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'];
-const HDR_PROY     = ['ID','Nombre','Inicio','Fin','Dias','Personal','Ciudades','Cuentas KA','Efectividad','Cobertura','Avances','Estado','Obs'];
+const HDR_PROY     = ['ID','Nombre','Inicio','Fin','Dias','Personal','Ciudades','Cuentas KA','Efectividad','Cobertura','Avances','Estado','Obs','Responsable'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
 function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -162,6 +162,7 @@ function handleGet(e) {
       avances:     s(r[10]),
       estado:      s(r[11]),
       obs:         s(r[12]),
+      responsable: s(r[13]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -311,7 +312,7 @@ function handlePost(e) {
     const id = b.id || ('P' + new Date().getTime());
     const row = [id, b.nombre||'', b.inicio||'', b.fin||'', num(b.dias), num(b.personal),
       b.ciudades||'', b.cuentaska||'', num(b.efectividad), num(b.cobertura),
-      b.avances||'', b.estado||'Activo', b.obs||''];
+      b.avances||'', b.estado||'Activo', b.obs||'', b.responsable||''];
     const found = findRow(sh, id);
     if (found > 0) sh.getRange(found, 1, 1, HDR_PROY.length).setValues([row]);
     else sh.appendRow(row);
