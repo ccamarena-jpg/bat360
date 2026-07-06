@@ -173,6 +173,21 @@ function handlePost(e) {
     return jsonResp({ ok: false, error: 'ID no encontrado' });
   }
 
+  // Carga masiva de facturas (una sola escritura)
+  if (accion === 'saveFacturacionBulk') {
+    const sh = getOrCreate(ss, SHEET_FACT, HDR_FACT);
+    const items = body.rows || [];
+    if (!items.length) return jsonResp({ error: 'Sin filas para cargar' });
+    const base = new Date().getTime();
+    const rows = items.map((b, i) => [
+      b.id || ('F' + (base + i)), b.cliente||'', b.ejecutivo||'Claudia Camarena', b.tipo||'', b.responsable||'',
+      b.servicio||'', b.mes||'', num(b.importe), b.os||'', b.serie||'', b.factura||'',
+      b.fechaFactura||'', b.fechaVenc||'', b.estado||'Pendiente', b.estadoDetalle||''
+    ]);
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_FACT.length).setValues(rows);
+    return jsonResp({ ok: true, added: rows.length });
+  }
+
   // ── GASTOS ─────────────────────────────────────────────────────
   if (accion === 'saveGasto') {
     const sh = getOrCreate(ss, SHEET_GASTOS, HDR_GASTOS);
@@ -192,6 +207,20 @@ function handlePost(e) {
     const found = findRow(sh, body.id);
     if (found > 0) { sh.deleteRow(found); return jsonResp({ ok: true, action: 'deleted' }); }
     return jsonResp({ ok: false, error: 'ID no encontrado' });
+  }
+
+  // Carga masiva de gastos (una sola escritura)
+  if (accion === 'saveGastoBulk') {
+    const sh = getOrCreate(ss, SHEET_GASTOS, HDR_GASTOS);
+    const items = body.rows || [];
+    if (!items.length) return jsonResp({ error: 'Sin filas para cargar' });
+    const base = new Date().getTime();
+    const rows = items.map((b, i) => [
+      b.id || ('G' + (base + i)), b.cliente||'', b.tipo||'', b.mes||'', b.grupo||'Otros',
+      b.categoria||'', num(b.monto), b.detalle||''
+    ]);
+    sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_GASTOS.length).setValues(rows);
+    return jsonResp({ ok: true, added: rows.length });
   }
 
   // ── MAESTROS ───────────────────────────────────────────────────

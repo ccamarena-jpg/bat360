@@ -366,6 +366,7 @@ function renderFacturacion(c){
     <div class="field"><label>Año</label><select onchange="setFFil('anio',this.value)">${opts(anios,f.anio)}</select></div>
     <div class="field"><label>Mes</label><select onchange="setFFil('mes',this.value)"><option value="">Todos</option>${mesesDe.map(m=>`<option value="${m}" ${m===f.mes?'selected':''}>${mesLabel(m)}</option>`).join('')}</select></div>
     <div class="field" style="flex:1;min-width:160px"><label>Buscar</label><input placeholder="servicio, factura, responsable…" value="${esc(f.q||'')}" oninput="setFFil('q',this.value)"></div>
+    <button class="btn sec" onclick="abrirCarga('fact')">⬆ Cargar consolidado</button>
     <button class="btn" onclick="abrirFactura()">+ Nueva factura</button>
   </div>
   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
@@ -453,6 +454,7 @@ function renderGastos(c){
     <div class="field"><label>Cliente</label><select onchange="STATE._gFil.cliente=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
     <div class="field"><label>Servicio</label><select onchange="STATE._gFil.servicio=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Servicio,f.servicio)}</select></div>
     <div class="field"><label>Año</label><select onchange="STATE._gFil.anio=this.value;renderGastos(el('content'))">${opts(anios,f.anio)}</select></div>
+    <button class="btn sec" onclick="abrirCarga('gasto')">⬆ Cargar consolidado</button>
     <button class="btn" onclick="abrirGasto()">+ Nuevo gasto</button>
   </div>
   <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
@@ -598,6 +600,134 @@ function guardarUrl(){
   STATE.url=el('cfg_url').value.trim();
   localStorage.setItem('bat_url',STATE.url);
   toast('URL guardada'); cargarTodo();
+}
+
+// ════════ CARGA CONSOLIDADA (plantilla) ════════
+const PLANTILLAS = {
+  fact: {
+    nombre:'facturas',
+    headers:['Cliente','Tipo de SS','Responsable de Pago','Servicio / Proyecto','Mes','Importe','OS','Serie Factura','# Factura','Fecha Factura','Fecha Vencimiento','Estado'],
+    ejemplo:['BAT','ENVIOS','SOFIA MAGNI','Envío de material a tienda X','2026-07','1250.50','','E001','3450','2026-07-05','','Pendiente'],
+    accion:'saveFacturacionBulk',
+    map:o=>({cliente:o['Cliente'],tipo:o['Tipo de SS'],responsable:o['Responsable de Pago'],servicio:o['Servicio / Proyecto'],mes:normMes(o['Mes']),importe:parseMonto(o['Importe']),os:o['OS'],serie:o['Serie Factura'],factura:o['# Factura'],fechaFactura:normFecha(o['Fecha Factura']),fechaVenc:normFecha(o['Fecha Vencimiento']),estado:o['Estado']||'Pendiente'}),
+    valid:r=>r.cliente&&r.mes,
+  },
+  gasto: {
+    nombre:'gastos',
+    headers:['Cliente','Servicio','Mes','Grupo','Categoria','Monto','Detalle'],
+    ejemplo:['BAT','ENVIOS','2026-07','Personas','Planilla Campo','8000','Equipo julio'],
+    accion:'saveGastoBulk',
+    map:o=>({cliente:o['Cliente'],tipo:o['Servicio'],mes:normMes(o['Mes']),grupo:(o['Grupo']||'Otros'),categoria:o['Categoria'],monto:parseMonto(o['Monto']),detalle:o['Detalle']}),
+    valid:r=>r.cliente&&r.tipo&&r.mes,
+  }
+};
+function parseCSV(t,delim){
+  delim = delim || ',';
+  const rows=[]; let i=0,f='',row=[],q=false; t=(t||'').replace(/^﻿/,'');
+  while(i<t.length){const c=t[i];
+    if(q){ if(c==='"'){ if(t[i+1]==='"'){f+='"';i++;} else q=false;} else f+=c; }
+    else { if(c==='"')q=true; else if(c===delim){row.push(f);f='';}
+           else if(c==='\n'){row.push(f);rows.push(row);row=[];f='';}
+           else if(c==='\r'){} else f+=c; }
+    i++;}
+  if(f.length||row.length){row.push(f);rows.push(row);}
+  return rows;
+}
+function parseToObjects(txt){
+  // detecta separador por la primera línea (Excel PE exporta con ;)
+  const first=(''+(txt||'')).replace(/^﻿/,'').split(/\r?\n/)[0]||'';
+  const delim = first.includes(';') ? ';' : ',';
+  const rows=parseCSV(txt,delim).filter(r=>r.some(c=>(c||'').trim()!==''));
+  if(rows.length<2) return [];
+  const H=rows[0].map(h=>(h||'').trim());
+  return rows.slice(1).map(r=>{const o={};H.forEach((h,i)=>o[h]=(r[i]||'').trim());return o;});
+}
+function parseMonto(s){
+  s=(''+(s==null?'':s)).trim().replace(/\s/g,'').replace(/S\/?/i,'');
+  if(!s) return 0;
+  const hasC=s.includes(','), hasD=s.includes('.');
+  if(hasC&&hasD){ if(s.lastIndexOf(',')>s.lastIndexOf('.')) s=s.replace(/\./g,'').replace(',','.'); else s=s.replace(/,/g,''); }
+  else if(hasC){ s=s.replace(',','.'); }
+  const n=parseFloat(s); return isNaN(n)?0:n;
+}
+function normMes(s){ s=(''+(s||'')).trim(); let m;
+  if(m=s.match(/^(\d{4})-(\d{1,2})/)) return m[1]+'-'+String(m[2]).padStart(2,'0')+'-01';
+  if(m=s.match(/^(\d{1,2})[\/\-](\d{4})$/)) return m[2]+'-'+m[1].padStart(2,'0')+'-01';
+  if(m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  return s;
+}
+function normFecha(s){ s=(''+(s||'')).trim(); let m;
+  if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)) return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+  if(m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  return s;
+}
+function csvCell(v){ v=(''+v); return /[",;\n]/.test(v)? '"'+v.replace(/"/g,'""')+'"' : v; }
+function descargarPlantilla(tipo){
+  const P=PLANTILLAS[tipo];
+  const csv=[P.headers.map(csvCell).join(','), P.ejemplo.map(csvCell).join(',')].join('\r\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='plantilla_'+P.nombre+'.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+function abrirCarga(tipo){
+  const P=PLANTILLAS[tipo];
+  showModal(`
+    <h3>⬆ Cargar ${P.nombre} en consolidado</h3>
+    <p class="muted" style="font-size:12.5px;line-height:1.65;margin-bottom:14px">
+      <b>1.</b> Descarga la plantilla &nbsp;<b>2.</b> Llénala (una fila por ${tipo==='fact'?'factura':'gasto'}) &nbsp;<b>3.</b> Súbela aquí.<br>
+      Formato del <b>Mes</b>: <code>2026-07</code>. La primera fila de ejemplo puedes borrarla o reemplazarla.
+    </p>
+    <button class="btn" onclick="descargarPlantilla('${tipo}')">⬇ Descargar plantilla (.csv)</button>
+    <div class="field" style="margin-top:16px">
+      <label>Subir plantilla llena (.csv)</label>
+      <input type="file" accept=".csv,text/csv" onchange="procesarArchivo('${tipo}',this)">
+    </div>
+    <div id="carga-preview" style="margin-top:14px"></div>
+    <div class="modal-actions">
+      <button class="btn sec" onclick="cerrarModal()">Cerrar</button>
+      <button class="btn" id="btn-carga" style="display:none" onclick="confirmarCarga('${tipo}')">Cargar</button>
+    </div>`);
+}
+function procesarArchivo(tipo,input){
+  const file=input.files[0]; if(!file) return;
+  const P=PLANTILLAS[tipo]; const reader=new FileReader();
+  reader.onload=e=>{
+    let mapped=[];
+    try{ mapped=parseToObjects(e.target.result).map(P.map); }
+    catch(err){ el('carga-preview').innerHTML='<p style="color:var(--bad)">No pude leer el archivo. ¿Es un CSV?</p>'; return; }
+    const validas=mapped.filter(P.valid);
+    STATE._carga={tipo, rows:validas};
+    const inval=mapped.length-validas.length;
+    el('carga-preview').innerHTML =
+      `<div class="kpi" style="border-top-color:var(--brand)"><div class="lbl">Filas leídas</div><div class="val">${mapped.length}</div>
+       <div class="hint">${validas.length} válidas${inval?` · <span style="color:var(--bad)">${inval} con datos faltantes (se omiten)</span>`:''}</div></div>`
+      + (validas.length? tablaPreview(tipo,validas.slice(0,6)) : '<p class="muted" style="margin-top:10px">Ninguna fila válida. Revisa que Cliente'+(tipo==='gasto'?', Servicio':'')+' y Mes estén llenos.</p>');
+    const btn=el('btn-carga');
+    btn.style.display = validas.length? 'inline-block':'none';
+    btn.disabled=false; btn.textContent=`Cargar ${validas.length} ${P.nombre}`;
+  };
+  reader.readAsText(file,'UTF-8');
+}
+function tablaPreview(tipo,rows){
+  const head = tipo==='fact'
+    ? '<th>Cliente</th><th>Servicio</th><th>Mes</th><th class="num">Importe</th>'
+    : '<th>Cliente</th><th>Servicio</th><th>Mes</th><th>Grupo</th><th class="num">Monto</th>';
+  const body = rows.map(r=> tipo==='fact'
+    ? `<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td class="num">${money(r.importe)}</td></tr>`
+    : `<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td>${esc(r.grupo)}</td><td class="num">${money(r.monto)}</td></tr>`
+  ).join('');
+  return `<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    <p class="muted" style="font-size:11px;margin-top:6px">Vista previa de las primeras filas.</p>`;
+}
+async function confirmarCarga(tipo){
+  const P=PLANTILLAS[tipo]; const rows=(STATE._carga&&STATE._carga.rows)||[];
+  if(!rows.length) return;
+  const btn=el('btn-carga'); btn.disabled=true; btn.textContent='Cargando…';
+  try{
+    const r=await apiPost({accion:P.accion, rows});
+    cerrarModal(); toast(`${(r&&r.added)||rows.length} ${P.nombre} cargados ✓`);
+    await cargarTodo(); goView(tipo==='fact'?'facturacion':'gastos');
+  }catch(e){ toast(e.message,true); btn.disabled=false; btn.textContent=`Cargar ${rows.length} ${P.nombre}`; }
 }
 
 // ════════ MODAL ════════
