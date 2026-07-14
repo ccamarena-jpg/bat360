@@ -167,7 +167,7 @@ const CLAVE = 'BAT360';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnfh98OMw0mVuBIF02OUPrWmCpcyrH7tOaOmtFSY1dmJtxreoiMWudJ1tPiZYS8NgAvA/exec';
 const STATE = {
   url: localStorage.getItem('bat_url') || GAS_URL,
-  fact: [], gastos: [], merch: [], proyectos: [], compras: [], maestros: {},
+  fact: [], gastos: [], merch: [], proyectos: [], compras: [], pptos: [], maestros: {},
   promo: {kpi:[], materiales:[], incidencias:[]},
   view: 'resumen',
 };
@@ -207,10 +207,10 @@ async function cargarTodo(){
   if(!STATE.url){ setConn(false,'Sin configurar'); render(); return; }
   setConn(false,'Cargando…');
   try{
-    const [f,g,me,pr,po,co,m] = await Promise.all([
-      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getProyectos'), apiGet('getPromo'), apiGet('getCompras'), apiGet('getMaestros')
+    const [f,g,me,pr,po,co,pp,m] = await Promise.all([
+      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getProyectos'), apiGet('getPromo'), apiGet('getCompras'), apiGet('getPptos'), apiGet('getMaestros')
     ]);
-    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.proyectos = pr.rows||[]; STATE.compras = co.rows||[]; STATE.maestros = m.maestros||{};
+    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.proyectos = pr.rows||[]; STATE.compras = co.rows||[]; STATE.pptos = pp.rows||[]; STATE.maestros = m.maestros||{};
     STATE.promo = {kpi:po.kpi||[], materiales:po.materiales||[], incidencias:po.incidencias||[]};
     setConn(true, `${STATE.fact.length} fact · ${STATE.gastos.length} gastos · ${STATE.merch.length} merch · ${STATE.proyectos.length} proy`);
     render();
@@ -972,77 +972,104 @@ function leadDias(a,b){ if(!a||!b) return null; const ms=new Date(b+'T00:00:00')
 function renderCompras(c){
   STATE._coFil = STATE._coFil || {};
   const f=STATE._coFil;
-  const all=STATE.compras.slice();
-  const anios=[...new Set(all.map(r=>(r.fechaPpto||r.fechaCompra||'').slice(0,4)).filter(Boolean))].sort().reverse();
+  const anios=[...new Set(STATE.pptos.map(p=>(p.mesAprobado||'').slice(0,4)).concat(STATE.compras.map(x=>(x.fechaCompra||'').slice(0,4))).filter(Boolean))].sort().reverse();
   const anio=f.anio!==undefined?f.anio:(anios[0]||'');
   f.anio=anio;
-  const rows=all.filter(r=>!anio || (r.fechaPpto||r.fechaCompra||'').slice(0,4)===anio)
-    .sort((a,b)=>(a.fechaPpto||a.fechaCompra||'')<(b.fechaPpto||b.fechaCompra||'')?1:-1);
-  const total=rows.reduce((a,b)=>a+(+b.monto||0),0);
-  const leadsAll=rows.map(r=>leadDias(r.fechaPpto,r.fechaCompra)).filter(x=>x!=null);
-  const leadProm=leadsAll.length? Math.round(leadsAll.reduce((a,b)=>a+b,0)/leadsAll.length):0;
+  const pptos=STATE.pptos.filter(p=>!anio || (p.mesAprobado||'').slice(0,4)===anio)
+    .sort((a,b)=>(a.mesAprobado||'')<(b.mesAprobado||'')?1:-1);
+  const compras=STATE.compras.filter(x=>!anio || (x.fechaCompra||'').slice(0,4)===anio);
+  const costoDe=nombre=>compras.filter(x=>(x.ppto||'')===nombre).reduce((a,b)=>a+(+b.total||0),0);
 
-  // consolidado por quarter
-  const q={};
-  rows.forEach(r=>{const k=quarterOf(r.fechaPpto||r.fechaCompra); if(!k)return; (q[k]=q[k]||{n:0,monto:0,leads:[]}); q[k].n++; q[k].monto+=(+r.monto||0); const ld=leadDias(r.fechaPpto,r.fechaCompra); if(ld!=null)q[k].leads.push(ld);});
-  const qKeys=Object.keys(q).sort();
-  const maxQ=Math.max(1,...qKeys.map(k=>q[k].monto));
+  const totAprob=pptos.reduce((a,b)=>a+(+b.montoAprobado||0),0);
+  const totCosto=compras.reduce((a,b)=>a+(+b.total||0),0);
+  const margen=totAprob-totCosto;
+  const pctM=totAprob? margen/totAprob*100 : 0;
 
   c.innerHTML=`
   <div class="filters">
     <div class="field"><label>Año</label><select onchange="STATE._coFil.anio=this.value;renderCompras(el('merch-sub'))">${['<option value="">Todos</option>'].concat(anios.map(a=>`<option ${a===anio?'selected':''}>${a}</option>`)).join('')}</select></div>
     <div style="flex:1"></div>
+    <button class="btn sec" onclick="abrirPpto()">+ PPTO aprobado</button>
     <button class="btn sec" onclick="abrirCarga('compra')">⬆ Cargar consolidado</button>
     <button class="btn" onclick="abrirCompra()">+ Compra</button>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="lbl">Invertido en materiales${anio?' · '+anio:''}</div><div class="val">${money(total)}</div><div class="hint">${rows.length} compras</div></div>
-    <div class="kpi"><div class="lbl">Duración promedio</div><div class="val">${leadProm} d</div><div class="hint">de aprobación PPTO a compra</div></div>
-    <div class="kpi"><div class="lbl">Quarters con compras</div><div class="val">${qKeys.length}</div></div>
+    <div class="kpi"><div class="lbl">PPTO aprobado${anio?' · '+anio:''}</div><div class="val">${money(totAprob)}</div><div class="hint">${pptos.length} presupuestos</div></div>
+    <div class="kpi"><div class="lbl">Costo real materiales</div><div class="val">${money(totCosto)}</div><div class="hint">${compras.length} compras</div></div>
+    <div class="kpi"><div class="lbl">Margen del servicio</div><div class="val ${margen>=0?'pos':'neg'}">${money(margen)}</div><div class="hint">Aprobado − Costo</div></div>
+    <div class="kpi"><div class="lbl">% Margen</div><div class="val ${pctM>=0?'pos':'neg'}">${pctM.toFixed(1)}%</div></div>
   </div>
 
   <div class="panel">
-    <h3>📊 Consolidado por Quarter ${anio?'<span class="tag">'+anio+'</span>':''}</h3>
+    <h3>💰 PPTO aprobado vs costo real <span class="tag">margen por presupuesto</span></h3>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Quarter</th><th class="num"># materiales</th><th class="num">Monto total</th><th class="num">Duración prom.</th><th>Peso</th></tr></thead>
-      <tbody>${qKeys.length? qKeys.map(k=>{const lp=q[k].leads.length?Math.round(q[k].leads.reduce((a,b)=>a+b,0)/q[k].leads.length):0;return `<tr>
-        <td><b>${k.replace('-',' · ')}</b></td><td class="num">${q[k].n}</td><td class="num">${money(q[k].monto)}</td><td class="num">${lp} d</td>
-        <td><div class="bar-track" style="width:160px"><div class="bar-fill gold" style="width:${q[k].monto/maxQ*100}%"></div></div></td>
-      </tr>`;}).join('') : `<tr><td colspan="5"><div class="empty">Sin compras registradas.</div></td></tr>`}</tbody>
+      <thead><tr><th>PPTO aprobado</th><th>Mes aprob.</th><th>Quarter</th><th class="num">Aprobado</th><th class="num">Costo real</th><th class="num">Margen</th><th class="num">%</th><th></th></tr></thead>
+      <tbody>${pptos.length? pptos.map(p=>{const costo=costoDe(p.nombre);const m=(+p.montoAprobado||0)-costo;const pc=p.montoAprobado?m/p.montoAprobado*100:0;return `<tr>
+        <td><b>${esc(p.nombre)}</b></td><td>${p.mesAprobado?mesLabel(mesKey(p.mesAprobado)):'·'}</td>
+        <td>${quarterOf(p.mesAprobado).replace('-',' ')}</td>
+        <td class="num">${money(p.montoAprobado)}</td><td class="num">${money(costo)}</td>
+        <td class="num ${m>=0?'pos':'neg'}">${money(m)}</td><td class="num ${pc>=0?'pos':'neg'}">${pc.toFixed(1)}%</td>
+        <td><div class="row-actions"><button class="btn sec sm" onclick='abrirPpto(${JSON.stringify(p.id)})'>✎</button><button class="btn danger" onclick='borrarPpto(${JSON.stringify(p.id)})'>🗑</button></div></td>
+      </tr>`;}).join('') : `<tr><td colspan="8"><div class="empty">Sin PPTOs aprobados. Crea uno con <b>+ PPTO aprobado</b> y luego asóciale las compras.</div></td></tr>`}</tbody>
     </table></div>
   </div>
 
   <div class="panel">
-    <h3>🛍️ Detalle de compras <span class="tag">${rows.length} líneas</span></h3>
+    <h3>🛍️ Compras / costo de materiales <span class="tag">${compras.length} líneas</span></h3>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Material</th><th>Cuenta</th><th>Aprob. PPTO</th><th>Fecha compra</th><th class="num">Duración</th><th class="num">Monto</th><th>Quarter</th><th>Obs</th><th></th></tr></thead>
-      <tbody>${rows.length? rows.map(r=>{const ld=leadDias(r.fechaPpto,r.fechaCompra);return `<tr>
-        <td><b>${esc(r.material)}</b></td><td>${esc(r.cuenta)}</td>
-        <td>${r.fechaPpto?fechaLabel(r.fechaPpto):'·'}</td><td>${r.fechaCompra?fechaLabel(r.fechaCompra):'·'}</td>
-        <td class="num">${ld!=null?ld+' d':'·'}</td><td class="num">${money(r.monto)}</td>
-        <td>${quarterOf(r.fechaPpto||r.fechaCompra).replace('-',' ')}</td>
-        <td style="white-space:normal;max-width:200px">${esc(r.obs)}</td>
+      <thead><tr><th>Material</th><th>PPTO</th><th class="num">Cantidad</th><th class="num">P. Unitario</th><th class="num">Total</th><th>Fecha compra</th><th>Cuenta</th><th>Obs</th><th></th></tr></thead>
+      <tbody>${compras.length? compras.map(r=>`<tr>
+        <td><b>${esc(r.material)}</b></td><td>${esc(r.ppto)||'<span class="muted">—</span>'}</td>
+        <td class="num">${r.cantidad||'·'}</td><td class="num">${money(r.precioUnit)}</td><td class="num">${money(r.total)}</td>
+        <td>${r.fechaCompra?fechaLabel(r.fechaCompra):'·'}</td><td>${esc(r.cuenta)}</td>
+        <td style="white-space:normal;max-width:180px">${esc(r.obs)}</td>
         <td><div class="row-actions"><button class="btn sec sm" onclick='abrirCompra(${JSON.stringify(r.id)})'>✎</button><button class="btn danger" onclick='borrarCompra(${JSON.stringify(r.id)})'>🗑</button></div></td>
-      </tr>`;}).join('') : `<tr><td colspan="9"><div class="empty">Aún no registras compras de materiales. Usa <b>+ Compra</b> o <b>Cargar consolidado</b>.</div></td></tr>`}</tbody>
+      </tr>`).join('') : `<tr><td colspan="9"><div class="empty">Aún no registras compras. Usa <b>+ Compra</b> o <b>⬆ Cargar consolidado</b>.</div></td></tr>`}</tbody>
     </table></div>
   </div>`;
 }
+
+function abrirPpto(id){
+  const p=id?STATE.pptos.find(x=>x.id===id):{};
+  showModal(`<h3>${id?'Editar':'Nuevo'} PPTO aprobado</h3>
+    <div class="grid2">
+      <div class="field full"><label>Nombre del PPTO</label><input id="pp_nom" value="${esc(p.nombre||'')}" placeholder="PPTO Materiales Vuse Q1"></div>
+      <div class="field"><label>Mes aprobado</label><input type="month" id="pp_mes" value="${mesKey(p.mesAprobado)||''}"></div>
+      <div class="field"><label>Monto aprobado (S/)</label><input type="number" step="0.01" id="pp_monto" value="${p.montoAprobado!=null&&p.montoAprobado!==''?p.montoAprobado:''}"></div>
+      <div class="field full"><label>Observación</label><input id="pp_obs" value="${esc(p.obs||'')}"></div>
+    </div>
+    <div class="modal-actions"><button class="btn sec" onclick="cerrarModal()">Cancelar</button><button class="btn" onclick='guardarPpto(${JSON.stringify(id||"")})'>Guardar</button></div>`);
+}
+async function guardarPpto(id){
+  const body={accion:'savePpto', id:id||'', nombre:el('pp_nom').value,
+    mesAprobado:(el('pp_mes').value||'')+(el('pp_mes').value?'-01':''), montoAprobado:el('pp_monto').value||0, obs:el('pp_obs').value};
+  if(!body.nombre){ toast('Nombre requerido',true); return; }
+  cerrarModal();
+  try{ await apiPost(body); toast('PPTO guardado'); STATE._merchTab='compras'; await cargarTodo(); goView('merch'); }catch(e){ toast(e.message,true); }
+}
+async function borrarPpto(id){ if(!confirm('¿Borrar este PPTO aprobado?'))return; try{await apiPost({accion:'deletePpto',id});toast('Borrado');STATE._merchTab='compras';await cargarTodo();goView('merch');}catch(e){toast(e.message,true);} }
+
 function abrirCompra(id){
   const r=id?STATE.compras.find(x=>x.id===id):{};
+  const pptoOpts=['<option value="">— Sin PPTO —</option>'].concat(STATE.pptos.map(p=>`<option ${p.nombre===r.ppto?'selected':''}>${esc(p.nombre)}</option>`)).join('');
   showModal(`<h3>${id?'Editar':'Nueva'} compra de material</h3>
     <div class="grid2">
+      <div class="field full"><label>PPTO aprobado (asociar a)</label><select id="co_ppto">${pptoOpts}</select></div>
       <div class="field full"><label>Material</label><input id="co_mat" value="${esc(r.material||'')}" placeholder="Dispensador Vuse, Cava LS…"></div>
-      <div class="field full"><label>Cuenta / cadena</label><input id="co_cta" value="${esc(r.cuenta||'')}" placeholder="Oxxo, Tambo, General…"></div>
-      <div class="field"><label>Fecha aprobación PPTO</label><input type="date" id="co_ppto" value="${r.fechaPpto||''}"></div>
-      <div class="field"><label>Fecha de compra</label><input type="date" id="co_comp" value="${r.fechaCompra||''}"></div>
-      <div class="field"><label>Monto (S/)</label><input type="number" step="0.01" id="co_monto" value="${r.monto!=null&&r.monto!==''?r.monto:''}"></div>
+      <div class="field"><label>Cantidad</label><input type="number" step="1" id="co_cant" value="${r.cantidad!=null&&r.cantidad!==''?r.cantidad:''}" oninput="calcTotalCompra()"></div>
+      <div class="field"><label>Precio unitario (S/)</label><input type="number" step="0.01" id="co_pu" value="${r.precioUnit!=null&&r.precioUnit!==''?r.precioUnit:''}" oninput="calcTotalCompra()"></div>
+      <div class="field"><label>Total (S/)</label><input id="co_total" value="${money(r.total).replace('S/ ','')}" readonly></div>
+      <div class="field"><label>Fecha de compra</label><input type="date" id="co_fecha" value="${r.fechaCompra||''}"></div>
+      <div class="field"><label>Cuenta / cadena</label><input id="co_cta" value="${esc(r.cuenta||'')}" placeholder="Oxxo, Tambo, General…"></div>
       <div class="field full"><label>Observación</label><input id="co_obs" value="${esc(r.obs||'')}"></div>
     </div>
     <div class="modal-actions"><button class="btn sec" onclick="cerrarModal()">Cancelar</button><button class="btn" onclick='guardarCompra(${JSON.stringify(id||"")})'>Guardar</button></div>`);
 }
+function calcTotalCompra(){ const cant=parseFloat(el('co_cant').value)||0, pu=parseFloat(el('co_pu').value)||0; el('co_total').value=(cant*pu).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 async function guardarCompra(id){
-  const body={accion:'saveCompra', id:id||'', material:el('co_mat').value, cuenta:el('co_cta').value,
-    fechaPpto:el('co_ppto').value, fechaCompra:el('co_comp').value, monto:el('co_monto').value||0, obs:el('co_obs').value};
+  const cant=parseFloat(el('co_cant').value)||0, pu=parseFloat(el('co_pu').value)||0;
+  const body={accion:'saveCompra', id:id||'', ppto:el('co_ppto').value, material:el('co_mat').value,
+    cantidad:cant, precioUnit:pu, total:cant*pu, fechaCompra:el('co_fecha').value, cuenta:el('co_cta').value, obs:el('co_obs').value};
   if(!body.material){ toast('Material requerido',true); return; }
   cerrarModal();
   try{ await apiPost(body); toast('Compra guardada'); STATE._merchTab='compras'; await cargarTodo(); goView('merch'); }catch(e){ toast(e.message,true); }
@@ -1178,10 +1205,10 @@ const PLANTILLAS = {
   },
   compra: {
     nombre:'compras',
-    headers:['Material','Cuenta','Fecha PPTO','Fecha Compra','Monto','Obs'],
-    ejemplo:['Dispensador Vuse','Oxxo','2026-01-15','2026-02-10','12500','Aprobado Q1'],
+    headers:['PPTO','Material','Cantidad','Precio Unitario','Fecha Compra','Cuenta','Obs'],
+    ejemplo:['PPTO Vuse Q1','Dispensador Vuse','10','1250','2026-02-10','Oxxo','Aprobado Q1'],
     accion:'saveCompraBulk',
-    map:o=>({material:o['Material'],cuenta:o['Cuenta'],fechaPpto:normFecha(o['Fecha PPTO']),fechaCompra:normFecha(o['Fecha Compra']),monto:parseMonto(o['Monto']),obs:o['Obs']}),
+    map:o=>{const cant=parseMonto(o['Cantidad']),pu=parseMonto(o['Precio Unitario']);return {ppto:o['PPTO'],material:o['Material'],cantidad:cant,precioUnit:pu,total:cant*pu,fechaCompra:normFecha(o['Fecha Compra']),cuenta:o['Cuenta'],obs:o['Obs']};},
     valid:r=>r.material,
   }
 };
@@ -1284,8 +1311,8 @@ function tablaPreview(tipo,rows){
     head='<th>Semana</th><th>Cadena</th><th>Zona</th><th class="num">Prog.</th><th class="num">Por prog.</th><th class="num">Efect.</th>';
     body=rows.map(r=>`<tr><td>${esc(semLabel(r.semana))}</td><td>${esc(r.cadena)}</td><td>${esc(r.zona)}</td><td class="num">${r.programado}</td><td class="num">${r.porprogramar}</td><td class="num">${r.efectivo}</td></tr>`).join('');
   } else {
-    head='<th>Material</th><th>Cuenta</th><th>Fecha PPTO</th><th>Fecha Compra</th><th class="num">Monto</th>';
-    body=rows.map(r=>`<tr><td>${esc(r.material)}</td><td>${esc(r.cuenta)}</td><td>${esc(fechaLabel(r.fechaPpto))}</td><td>${esc(fechaLabel(r.fechaCompra))}</td><td class="num">${money(r.monto)}</td></tr>`).join('');
+    head='<th>PPTO</th><th>Material</th><th class="num">Cant.</th><th class="num">P.Unit.</th><th class="num">Total</th>';
+    body=rows.map(r=>`<tr><td>${esc(r.ppto)}</td><td>${esc(r.material)}</td><td class="num">${r.cantidad}</td><td class="num">${money(r.precioUnit)}</td><td class="num">${money(r.total)}</td></tr>`).join('');
   }
   return `<div class="tbl-wrap" style="margin-top:10px"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
     <p class="muted" style="font-size:11px;margin-top:6px">Vista previa de las primeras filas.</p>`;

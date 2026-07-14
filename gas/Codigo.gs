@@ -21,6 +21,7 @@ const SHEET_PKPI     = 'PromoKPI';
 const SHEET_PMAT     = 'PromoMateriales';
 const SHEET_PINC     = 'PromoIncidencias';
 const SHEET_COMPRA   = 'ComprasMateriales';
+const SHEET_PPTO     = 'PptoAprobado';
 
 const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
   'Servicio / Proyecto','Mes','Importe','OS','Serie Factura','# Factura',
@@ -32,7 +33,8 @@ const HDR_PROY     = ['ID','Nombre','Inicio','Fin','Dias','Personal','Ciudades',
 const HDR_PKPI     = ['Cadena','Cobertura S1','Cobertura S2','Efectividad S1','Efectividad S2','Conectados','Conectados Nota'];
 const HDR_PMAT     = ['ID','Cadena','Categoria','Material','Tiendas','Avance S1','Avance S2','Obs','Inicio','Fin'];
 const HDR_PINC     = ['ID','Cadena','Fecha','Incidencia','Responsable','Estado'];
-const HDR_COMPRA   = ['ID','Material','Cuenta','Fecha PPTO','Fecha Compra','Monto','Obs'];
+const HDR_COMPRA   = ['ID','PPTO','Material','Cantidad','Precio Unitario','Total','Fecha Compra','Cuenta','Obs'];
+const HDR_PPTO     = ['ID','Nombre','Mes Aprobado','Monto Aprobado','Obs'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
 function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -61,6 +63,7 @@ function initSheets() {
   getOrCreate(ss, SHEET_PMAT,     HDR_PMAT);
   getOrCreate(ss, SHEET_PINC,     HDR_PINC);
   getOrCreate(ss, SHEET_COMPRA,   HDR_COMPRA);
+  getOrCreate(ss, SHEET_PPTO,     HDR_PPTO);
   const shM = getOrCreate(ss, SHEET_MAESTROS, HDR_MAESTROS);
 
   // Sembrar catálogos solo si está vacío
@@ -205,8 +208,18 @@ function handleGet(e) {
     if (!sh) return jsonResp({ rows: [], count: 0 });
     const data = sh.getDataRange().getValues();
     const rows = data.slice(1).filter(r => r[0]).map(r => ({
-      id: s(r[0]), material: s(r[1]), cuenta: s(r[2]),
-      fechaPpto: d(r[3]), fechaCompra: d(r[4]), monto: n(r[5]), obs: s(r[6]),
+      id: s(r[0]), ppto: s(r[1]), material: s(r[2]), cantidad: n(r[3]),
+      precioUnit: n(r[4]), total: n(r[5]), fechaCompra: d(r[6]), cuenta: s(r[7]), obs: s(r[8]),
+    }));
+    return jsonResp({ rows, count: rows.length });
+  }
+
+  if (accion === 'getPptos') {
+    const sh = ss.getSheetByName(SHEET_PPTO);
+    if (!sh) return jsonResp({ rows: [], count: 0 });
+    const data = sh.getDataRange().getValues();
+    const rows = data.slice(1).filter(r => r[0]).map(r => ({
+      id: s(r[0]), nombre: s(r[1]), mesAprobado: d(r[2]), montoAprobado: n(r[3]), obs: s(r[4]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -418,13 +431,33 @@ function handlePost(e) {
     return jsonResp({ ok: false, error: 'ID no encontrado' });
   }
 
+  // ── PPTO APROBADO ──────────────────────────────────────────────
+  if (accion === 'savePpto') {
+    const sh = getOrCreate(ss, SHEET_PPTO, HDR_PPTO);
+    const b = body;
+    if (!b.nombre) return jsonResp({ error: 'Nombre del PPTO requerido' });
+    const id = b.id || ('A' + new Date().getTime());
+    const row = [id, b.nombre||'', b.mesAprobado||'', num(b.montoAprobado), b.obs||''];
+    const found = findRow(sh, id);
+    if (found > 0) sh.getRange(found, 1, 1, HDR_PPTO.length).setValues([row]);
+    else sh.appendRow(row);
+    return jsonResp({ ok: true, id: id, action: found > 0 ? 'updated' : 'created' });
+  }
+  if (accion === 'deletePpto') {
+    const sh = ss.getSheetByName(SHEET_PPTO);
+    const found = findRow(sh, body.id);
+    if (found > 0) { sh.deleteRow(found); return jsonResp({ ok: true, action: 'deleted' }); }
+    return jsonResp({ ok: false, error: 'ID no encontrado' });
+  }
+
   // ── COMPRA DE MATERIALES ───────────────────────────────────────
   if (accion === 'saveCompra') {
     const sh = getOrCreate(ss, SHEET_COMPRA, HDR_COMPRA);
     const b = body;
     if (!b.material) return jsonResp({ error: 'Material requerido' });
     const id = b.id || ('C' + new Date().getTime());
-    const row = [id, b.material||'', b.cuenta||'', b.fechaPpto||'', b.fechaCompra||'', num(b.monto), b.obs||''];
+    const total = num(b.total) || (num(b.cantidad) * num(b.precioUnit));
+    const row = [id, b.ppto||'', b.material||'', num(b.cantidad), num(b.precioUnit), total, b.fechaCompra||'', b.cuenta||'', b.obs||''];
     const found = findRow(sh, id);
     if (found > 0) sh.getRange(found, 1, 1, HDR_COMPRA.length).setValues([row]);
     else sh.appendRow(row);
@@ -441,9 +474,10 @@ function handlePost(e) {
     const items = body.rows || [];
     if (!items.length) return jsonResp({ error: 'Sin filas para cargar' });
     const base = new Date().getTime();
-    const rows = items.map((b, i) => [
-      b.id || ('C' + (base + i)), b.material||'', b.cuenta||'', b.fechaPpto||'', b.fechaCompra||'', num(b.monto), b.obs||''
-    ]);
+    const rows = items.map((b, i) => {
+      const total = num(b.total) || (num(b.cantidad) * num(b.precioUnit));
+      return [b.id || ('C' + (base + i)), b.ppto||'', b.material||'', num(b.cantidad), num(b.precioUnit), total, b.fechaCompra||'', b.cuenta||'', b.obs||''];
+    });
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_COMPRA.length).setValues(rows);
     return jsonResp({ ok: true, added: rows.length });
   }
