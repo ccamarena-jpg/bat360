@@ -493,12 +493,27 @@ function s(v)   { return v === null || v === undefined ? '' : v.toString().trim(
 function n(v)   { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
 function num(v) { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
 
-// Fecha -> 'YYYY-MM-DD' (acepta Date o texto)
+// Zona horaria del sheet (cacheada) — evita el corrimiento de 1 día
+var _TZ;
+function tz() {
+  if (!_TZ) {
+    try { _TZ = getSS().getSpreadsheetTimeZone() || 'America/Lima'; }
+    catch (e) { _TZ = 'America/Lima'; }
+  }
+  return _TZ;
+}
+
+// Fecha -> 'YYYY-MM-DD' (acepta Date o texto). Formatea en la zona horaria del sheet.
 function d(v) {
   if (v instanceof Date) {
-    return v.getFullYear() + '-' + pad(v.getMonth() + 1) + '-' + pad(v.getDate());
+    return Utilities.formatDate(v, tz(), 'yyyy-MM-dd');
   }
-  return s(v);
+  const t = s(v);
+  if (!t) return '';
+  // Normaliza textos DD/MM/YYYY -> YYYY-MM-DD
+  const m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (m) return m[3] + '-' + pad(m[2]) + '-' + pad(m[1]);
+  return t;
 }
 
 function pad(x) { return String(x).padStart(2, '0'); }
