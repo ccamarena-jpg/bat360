@@ -85,6 +85,25 @@ function initSheets() {
   return 'OK — pestañas y catálogos creados';
 }
 
+// ── Agregar la columna "Correo" a PptoAprobado si falta (ejecutar 1 vez) ──
+function agregarColumnaCorreo() {
+  const ss = getSS();
+  let sh = ss.getSheetByName(SHEET_PPTO);
+  if (!sh) { getOrCreate(ss, SHEET_PPTO, HDR_PPTO); return 'Pestaña PptoAprobado creada con la columna Correo.'; }
+  const lastCol = Math.max(sh.getLastColumn(), 1);
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  const find = colFinder(headers);
+  if (find(['Correo']) >= 0) return 'La columna Correo ya existe.';
+  const obsCol = find(['Obs', 'Observacion', 'Observación']);   // 0-based
+  let at;
+  if (obsCol >= 0) { at = obsCol + 1; sh.insertColumnBefore(at); }   // antes de Obs
+  else { sh.insertColumnAfter(lastCol); at = lastCol + 1; }          // al final
+  sh.getRange(1, at).setValue('Correo').setFontWeight('bold')
+    .setBackground('#1d3b78').setFontColor('#ffffff');
+  Logger.log('Columna Correo insertada en posición ' + at);
+  return 'OK — columna Correo agregada.';
+}
+
 // ── Asignar IDs a todas las filas de Facturacion (ejecutar 1 vez) ──
 // Crea la columna ID al inicio si no existe y rellena las vacías.
 function asignarIDsFacturacion() {
