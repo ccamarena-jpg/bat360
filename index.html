@@ -170,7 +170,7 @@ const SUPABASE_URL = 'https://pcahvqhczgdmpvsitvlo.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_8MtPFfQBDxmDju-MeUmccA_xTkkqsIv';
 const STATE = {
   url: localStorage.getItem('bat_url') || GAS_URL,
-  fact: [], gastos: [], merch: [], proyectos: [], compras: [], pptos: [], pptosCot: [], maestros: {},
+  fact: [], gastos: [], merch: [], proyectos: [], compras: [], pptos: [], pptosCot: [], cuotas: [], maestros: {},
   promo: {kpi:[], materiales:[], incidencias:[]},
   view: 'resumen',
 };
@@ -228,10 +228,10 @@ async function cargarTodo(){
   if(!STATE.url){ setConn(false,'Sin configurar'); render(); return; }
   setConn(false,'Cargando…');
   try{
-    const [f,g,me,pr,po,co,pp,m] = await Promise.all([
-      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getProyectos'), apiGet('getPromo'), apiGet('getCompras'), apiGet('getPptos'), apiGet('getMaestros')
+    const [f,g,me,pr,po,co,pp,cu,m] = await Promise.all([
+      apiGet('getFacturacion'), apiGet('getGastos'), apiGet('getMerch'), apiGet('getProyectos'), apiGet('getPromo'), apiGet('getCompras'), apiGet('getPptos'), apiGet('getCuotas'), apiGet('getMaestros')
     ]);
-    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.proyectos = pr.rows||[]; STATE.compras = co.rows||[]; STATE.pptos = pp.rows||[]; STATE.maestros = m.maestros||{};
+    STATE.fact = f.rows||[]; STATE.gastos = g.rows||[]; STATE.merch = me.rows||[]; STATE.proyectos = pr.rows||[]; STATE.compras = co.rows||[]; STATE.pptos = pp.rows||[]; STATE.cuotas = cu.rows||[]; STATE.maestros = m.maestros||{};
     STATE.promo = {kpi:po.kpi||[], materiales:po.materiales||[], incidencias:po.incidencias||[]};
     STATE.pptosCot = await fetchCotizaciones();
     setConn(true, `${STATE.fact.length} fact · ${STATE.gastos.length} gastos · ${STATE.merch.length} merch · ${STATE.proyectos.length} proy`);
@@ -312,6 +312,68 @@ function aggMargen(filtro={}){
   return Object.values(map);
 }
 
+// ════════ CUOTAS TRIMESTRALES (Claudia Camarena) ════════
+const EJECUTIVO_CUOTAS = 'Claudia Camarena';
+function factEjecutivoPorMes(anio){
+  const m={};
+  STATE.fact.forEach(f=>{
+    if((f.ejecutivo||'').toLowerCase().indexOf('claudia')<0) return;   // solo Claudia Camarena
+    if((f.mes||'').slice(0,4)!==anio) return;
+    const mo=parseInt((f.mes||'').slice(5,7)); if(!mo) return;
+    m[mo]=(m[mo]||0)+(+f.importe||0);
+  });
+  return m;
+}
+function cuotaDe(anio){
+  return STATE.cuotas.find(x=>(x.ejecutivo||'').toLowerCase().indexOf('claudia')>=0 && (''+x.anio)===(''+anio))
+    || {metaQ1:0,metaQ2:0,metaQ3:0,metaQ4:0};
+}
+function tablaCuotas(anio){
+  const porMes=factEjecutivoPorMes(anio);
+  const cu=cuotaDe(anio);
+  const metas=[+cu.metaQ1||0,+cu.metaQ2||0,+cu.metaQ3||0,+cu.metaQ4||0];
+  const yy=(''+anio).slice(2);
+  const quarters=[[1,2,3],[4,5,6],[7,8,9],[10,11,12]];
+  const filas=quarters.map((mons,qi)=>{
+    const meta=metas[qi]; let cum=0, total=0;
+    const cells=mons.map(mo=>{const amt=porMes[mo]||0; cum+=amt; total+=amt; const pc=meta?(cum/meta*100):0;
+      return `<td class="num"><div style="font-size:10px;color:var(--muted)">${MESES[mo-1]}-${yy}</div><div>${money(amt)}</div><div style="font-size:11px;color:${pc>=100?'var(--good)':'var(--muted)'}">${meta?pc.toFixed(0)+'%':'·'}</div></td>`;}).join('');
+    const dif=total-meta;
+    return `<tr>
+      <td><b>Q${qi+1} ${anio}</b></td>
+      <td class="num">${money(meta)}</td>
+      ${cells}
+      <td class="num" style="font-weight:700">${money(total)}</td>
+      <td class="num ${dif>=0?'pos':'neg'}">${money(dif)}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="panel">
+    <h3>🎯 Cuotas trimestrales <span class="tag">${esc(EJECUTIVO_CUOTAS)} · ${anio} · % = acumulado ÷ meta</span>
+      <button class="btn sec sm" style="margin-left:auto" onclick="editarCuota('${anio}')">✎ Editar metas</button></h3>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Trimestre</th><th class="num">Meta</th><th class="num">Mes 1</th><th class="num">Mes 2</th><th class="num">Mes 3</th><th class="num">Total Q</th><th class="num">Diferencia</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table></div>
+  </div>`;
+}
+function editarCuota(anio){
+  const cu=cuotaDe(anio);
+  showModal(`<h3>Metas trimestrales · ${esc(EJECUTIVO_CUOTAS)} · ${anio}</h3>
+    <div class="grid2">
+      <div class="field"><label>Meta Q1 (S/)</label><input type="number" id="cu_q1" value="${cu.metaQ1||''}"></div>
+      <div class="field"><label>Meta Q2 (S/)</label><input type="number" id="cu_q2" value="${cu.metaQ2||''}"></div>
+      <div class="field"><label>Meta Q3 (S/)</label><input type="number" id="cu_q3" value="${cu.metaQ3||''}"></div>
+      <div class="field"><label>Meta Q4 (S/)</label><input type="number" id="cu_q4" value="${cu.metaQ4||''}"></div>
+    </div>
+    <div class="modal-actions"><button class="btn sec" onclick="cerrarModal()">Cancelar</button><button class="btn" onclick="guardarCuota('${anio}')">Guardar</button></div>`);
+}
+async function guardarCuota(anio){
+  const body={accion:'saveCuota', ejecutivo:EJECUTIVO_CUOTAS, anio:anio,
+    metaQ1:el('cu_q1').value||0, metaQ2:el('cu_q2').value||0, metaQ3:el('cu_q3').value||0, metaQ4:el('cu_q4').value||0};
+  cerrarModal();
+  try{ await apiPost(body); toast('Metas guardadas'); await cargarTodo(); goView('resumen'); }catch(e){ toast(e.message,true); }
+}
+
 // ════════ VISTA: RESUMEN ════════
 function renderResumen(c){
   const anios=aniosDisponibles();
@@ -340,6 +402,7 @@ function renderResumen(c){
       <select onchange="STATE._anioRes=this.value;render()">${anios.map(a=>`<option ${a===anio?'selected':''}>${a}</option>`).join('')}</select>
     </div>
   </div>
+  ${tablaCuotas(anio)}
   <div class="kpis">
     <div class="kpi"><div class="lbl">Facturado ${anio}</div><div class="val">${money(tFact)}</div><div class="hint">${ag.length} líneas servicio·mes</div></div>
     <div class="kpi"><div class="lbl">Gastos registrados</div><div class="val">${money(tGas)}</div><div class="hint">${tFact?((tGas/tFact*100).toFixed(0)):0}% de lo facturado</div></div>
@@ -375,6 +438,9 @@ function facturacionFiltrada(){
     if(f.estado && r.estado!==f.estado) return false;
     if(f.anio && (r.mes||'').slice(0,4)!==f.anio) return false;
     if(f.mes && mesKey(r.mes)!==f.mes) return false;
+    if(f.resp && r.responsable!==f.resp) return false;
+    if(f.servq && !(''+r.servicio).toLowerCase().includes(f.servq.toLowerCase())) return false;
+    if(f.factq && !(`${r.serie} ${r.factura}`).toLowerCase().includes(f.factq.toLowerCase())) return false;
     if(f.q){ const q=f.q.toLowerCase(); if(!(`${r.servicio} ${r.factura} ${r.responsable} ${r.os}`.toLowerCase().includes(q))) return false; }
     return true;
   });
@@ -387,15 +453,15 @@ function renderFacturacion(c){
   const mesesDe = anios.length? [...new Set(STATE.fact.filter(r=>!f.anio||r.mes.slice(0,4)===f.anio).map(r=>mesKey(r.mes)))].filter(Boolean).sort() : [];
   const rows=facturacionFiltrada();
   const total=rows.reduce((a,b)=>a+(+b.importe||0),0);
+  const resps=[...new Set(STATE.fact.map(r=>r.responsable).filter(Boolean))].sort();
+  const fst='width:100%;padding:5px 6px;font-size:11px;font-weight:400';
+  const hayFiltro = f.cliente||f.servicio||f.estado||f.mes||f.resp||f.servq||f.factq;
 
   c.innerHTML=`
   <div class="filters">
-    <div class="field"><label>Cliente</label><select onchange="setFFil('cliente',this.value)">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
-    <div class="field"><label>Servicio</label><select onchange="setFFil('servicio',this.value)">${opts(STATE.maestros.Servicio,f.servicio)}</select></div>
-    <div class="field"><label>Estado</label><select onchange="setFFil('estado',this.value)">${opts(STATE.maestros.Estado,f.estado)}</select></div>
     <div class="field"><label>Año</label><select onchange="setFFil('anio',this.value)">${opts(anios,f.anio)}</select></div>
-    <div class="field"><label>Mes</label><select onchange="setFFil('mes',this.value)"><option value="">Todos</option>${mesesDe.map(m=>`<option value="${m}" ${m===f.mes?'selected':''}>${mesLabel(m)}</option>`).join('')}</select></div>
-    <div class="field" style="flex:1;min-width:160px"><label>Buscar</label><input placeholder="servicio, factura, responsable…" value="${esc(f.q||'')}" oninput="setFFil('q',this.value)"></div>
+    <div class="field" style="flex:1;min-width:180px"><label>Buscar (global)</label><input id="ff_q" placeholder="servicio, factura, responsable…" value="${esc(f.q||'')}" oninput="setFFil('q',this.value)"></div>
+    ${hayFiltro?`<button class="btn sec" onclick="limpiarFFil()">✕ Limpiar filtros</button>`:''}
     <button class="btn sec" onclick="abrirCarga('fact')">⬆ Cargar consolidado</button>
     <button class="btn" onclick="abrirFactura()">+ Nueva factura</button>
   </div>
@@ -404,7 +470,20 @@ function renderFacturacion(c){
     <div class="kpi"><div class="lbl">Importe total</div><div class="val ${total<0?'neg':''}">${money(total)}</div></div>
   </div>
   <div class="tbl-wrap"><table>
-    <thead><tr><th>Cliente</th><th>Servicio (Tipo)</th><th>Servicio / Proyecto</th><th>Mes</th><th class="num">Importe</th><th>Responsable</th><th>Factura</th><th>Estado</th><th></th></tr></thead>
+    <thead>
+      <tr><th>Cliente</th><th>Servicio (Tipo)</th><th>Servicio / Proyecto</th><th>Mes</th><th class="num">Importe</th><th>Responsable</th><th>Factura</th><th>Estado</th><th></th></tr>
+      <tr>
+        <th><select style="${fst}" onchange="setFFil('cliente',this.value)">${opts(STATE.maestros.Cliente,f.cliente)}</select></th>
+        <th><select style="${fst}" onchange="setFFil('servicio',this.value)">${opts(STATE.maestros.Servicio,f.servicio)}</select></th>
+        <th><input id="ff_servq" style="${fst}" placeholder="filtrar…" value="${esc(f.servq||'')}" oninput="setFFil('servq',this.value)"></th>
+        <th><select style="${fst}" onchange="setFFil('mes',this.value)"><option value="">Todos</option>${mesesDe.map(m=>`<option value="${m}" ${m===f.mes?'selected':''}>${mesLabel(m)}</option>`).join('')}</select></th>
+        <th></th>
+        <th><select style="${fst}" onchange="setFFil('resp',this.value)">${opts(resps,f.resp)}</select></th>
+        <th><input id="ff_factq" style="${fst}" placeholder="factura…" value="${esc(f.factq||'')}" oninput="setFFil('factq',this.value)"></th>
+        <th><select style="${fst}" onchange="setFFil('estado',this.value)">${opts(STATE.maestros.Estado,f.estado)}</select></th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>${rows.length? rows.map(r=>`<tr>
       <td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td>
       <td title="${esc(r.servicio)}">${esc(r.servicio.length>34?r.servicio.slice(0,33)+'…':r.servicio)}</td>
@@ -419,8 +498,15 @@ function renderFacturacion(c){
       </div></td>
     </tr>`).join('') : `<tr><td colspan="9"><div class="empty">No hay facturas con esos filtros</div></td></tr>`}</tbody>
   </table></div>`;
+  // restaura foco/cursor en el campo de texto que se estaba escribiendo
+  if(STATE._fFilFocus){ const e=el(STATE._fFilFocus); if(e){ e.focus(); const v=e.value; e.value=''; e.value=v; } }
 }
-function setFFil(k,v){ STATE._fFil[k]=v; if(k==='anio') STATE._fFil.mes=''; renderFacturacion(el('content')); }
+function setFFil(k,v){
+  STATE._fFil[k]=v; if(k==='anio') STATE._fFil.mes='';
+  STATE._fFilFocus = (k==='q'||k==='servq'||k==='factq') ? 'ff_'+k : null;
+  renderFacturacion(el('content'));
+}
+function limpiarFFil(){ STATE._fFil={}; STATE._fFilFocus=null; renderFacturacion(el('content')); }
 
 function abrirFactura(id){
   const r = id? STATE.fact.find(x=>x.id===id) : {};

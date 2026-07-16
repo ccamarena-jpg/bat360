@@ -15,6 +15,7 @@
 const SHEET_FACT     = 'Facturacion';
 const SHEET_GASTOS   = 'Gastos';
 const SHEET_MAESTROS = 'Maestros';
+const SHEET_CUOTAS   = 'Cuotas';
 const SHEET_MERCH    = 'Merch';
 const SHEET_PROY     = 'Proyectos';
 const SHEET_PKPI     = 'PromoKPI';
@@ -28,6 +29,7 @@ const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
   'Fecha Factura','Fecha Vencimiento','Estado','Estado Detalle'];
 const HDR_GASTOS   = ['ID','Cliente','Tipo de SS','Mes','Grupo','Categoria','Monto','Detalle'];
 const HDR_MAESTROS = ['Tipo','Valor'];
+const HDR_CUOTAS   = ['Ejecutivo','Anio','Meta Q1','Meta Q2','Meta Q3','Meta Q4'];
 const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'];
 const HDR_PROY     = ['ID','Nombre','Inicio','Fin','Dias','Personal','Ciudades','Cuentas KA','Efectividad','Cobertura','Avances','Estado','Obs','Responsable'];
 const HDR_PKPI     = ['Cadena','Cobertura S1','Cobertura S2','Efectividad S1','Efectividad S2','Conectados','Conectados Nota'];
@@ -64,6 +66,7 @@ function initSheets() {
   getOrCreate(ss, SHEET_PINC,     HDR_PINC);
   getOrCreate(ss, SHEET_COMPRA,   HDR_COMPRA);
   getOrCreate(ss, SHEET_PPTO,     HDR_PPTO);
+  getOrCreate(ss, SHEET_CUOTAS,   HDR_CUOTAS);
   const shM = getOrCreate(ss, SHEET_MAESTROS, HDR_MAESTROS);
 
   // Sembrar catálogos solo si está vacío
@@ -302,6 +305,17 @@ function handleGet(e) {
     const data = sh.getDataRange().getValues();
     const rows = data.slice(1).filter(r => r[0]).map(r => ({
       id: s(r[0]), nombre: s(r[1]), mesAprobado: d(r[2]), montoAprobado: n(r[3]), correo: s(r[4]), obs: s(r[5]),
+    }));
+    return jsonResp({ rows, count: rows.length });
+  }
+
+  if (accion === 'getCuotas') {
+    const sh = ss.getSheetByName(SHEET_CUOTAS);
+    if (!sh) return jsonResp({ rows: [], count: 0 });
+    const data = sh.getDataRange().getValues();
+    const rows = data.slice(1).filter(r => r[0]).map(r => ({
+      ejecutivo: s(r[0]), anio: s(r[1]),
+      metaQ1: n(r[2]), metaQ2: n(r[3]), metaQ3: n(r[4]), metaQ4: n(r[5]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -562,6 +576,22 @@ function handlePost(e) {
     });
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_COMPRA.length).setValues(rows);
     return jsonResp({ ok: true, added: rows.length });
+  }
+
+  // ── CUOTAS (metas trimestrales, manual) ────────────────────────
+  if (accion === 'saveCuota') {
+    const sh = getOrCreate(ss, SHEET_CUOTAS, HDR_CUOTAS);
+    const b = body;
+    if (!b.ejecutivo || !b.anio) return jsonResp({ error: 'Ejecutivo y año requeridos' });
+    const row = [b.ejecutivo, ''+b.anio, num(b.metaQ1), num(b.metaQ2), num(b.metaQ3), num(b.metaQ4)];
+    const data = sh.getDataRange().getValues();
+    let found = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (s(data[i][0]) === s(b.ejecutivo) && s(data[i][1]) === s(b.anio)) { found = i + 1; break; }
+    }
+    if (found > 0) sh.getRange(found, 1, 1, HDR_CUOTAS.length).setValues([row]);
+    else sh.appendRow(row);
+    return jsonResp({ ok: true, action: found > 0 ? 'updated' : 'created' });
   }
 
   // ── MAESTROS ───────────────────────────────────────────────────
