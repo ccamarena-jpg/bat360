@@ -178,6 +178,7 @@ const STATE = {
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'];
 const CAT_OTROS = ['Peaje','Cochera','Envíos','Embalaje','Combustible','Transporte','Almacenaje','Otros'];
 const CAT_PERSONAS = ['Planilla Oficina','Planilla Campo'];
+const CAT_ALL = CAT_PERSONAS.concat(CAT_OTROS);
 
 // ════════ HELPERS ════════
 const $ = s => document.querySelector(s);
@@ -309,10 +310,10 @@ function aggMargen(filtro={}){
   STATE.gastos.forEach(g=>{
     if(filtro.anio && (g.mes||'').slice(0,4)!==filtro.anio) return;
     if(filtro.cliente && g.cliente!==filtro.cliente) return;
-    const label = by==='proyecto' ? (g.tipo||'(sin proyecto)') : (g.concepto||g.tipo||'(sin servicio)');
+    const label = by==='proyecto' ? (g.tipo||'(sin proyecto)') : (g.tipoServicio||'(sin servicio)');
     const key=k(g.cliente, label, mesKey(g.mes));
     (map[key]=map[key]||{cliente:g.cliente,servicio:label,mes:mesKey(g.mes),fact:0,personas:0,otros:0});
-    if((g.grupo||'').toLowerCase().startsWith('person')) map[key].personas += +g.monto||0;
+    if((g.categoria||'').toLowerCase().startsWith('planilla')) map[key].personas += +g.monto||0;
     else map[key].otros += +g.monto||0;
   });
   return Object.values(map);
@@ -564,17 +565,17 @@ function renderGastos(c){
   const anios=aniosDisponibles();
   let rows=STATE.gastos.filter(r=>{
     if(f.cliente&&r.cliente!==f.cliente) return false;
-    if(f.concepto&&r.concepto!==f.concepto) return false;
+    if(f.tipoServicio&&r.tipoServicio!==f.tipoServicio) return false;
     if(f.anio&&(r.mes||'').slice(0,4)!==f.anio) return false;
     return true;
   });
-  const tPers=rows.filter(r=>(r.grupo||'').toLowerCase().startsWith('person')).reduce((a,b)=>a+(+b.monto||0),0);
+  const tPers=rows.filter(r=>(r.categoria||'').toLowerCase().startsWith('planilla')).reduce((a,b)=>a+(+b.monto||0),0);
   const tOtros=rows.reduce((a,b)=>a+(+b.monto||0),0)-tPers;
 
   c.innerHTML=`
   <div class="filters">
     <div class="field"><label>Cliente</label><select onchange="STATE._gFil.cliente=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
-    <div class="field"><label>Concepto (Tipo de SS)</label><select onchange="STATE._gFil.concepto=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Servicio,f.concepto)}</select></div>
+    <div class="field"><label>Tipo de Servicio</label><select onchange="STATE._gFil.tipoServicio=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Servicio,f.tipoServicio)}</select></div>
     <div class="field"><label>Año</label><select onchange="STATE._gFil.anio=this.value;renderGastos(el('content'))">${opts(anios,f.anio)}</select></div>
     <button class="btn sec" onclick="abrirCarga('gasto')">⬆ Cargar consolidado</button>
     <button class="btn" onclick="abrirGasto()">+ Nuevo gasto</button>
@@ -585,52 +586,47 @@ function renderGastos(c){
     <div class="kpi"><div class="lbl">Total gastos</div><div class="val">${money(tPers+tOtros)}</div></div>
   </div>
   <div class="tbl-wrap"><table>
-    <thead><tr><th>Cliente</th><th>Tipo de Servicios/Proyecto</th><th>Concepto</th><th>Mes</th><th>Grupo</th><th>Categoría</th><th class="num">Monto</th><th></th></tr></thead>
+    <thead><tr><th>Cliente</th><th>Tipo de Servicios/Proyecto</th><th>Concepto</th><th>Mes</th><th>Tipo de Servicio</th><th>Categoría</th><th class="num">Monto</th><th>Solicitado por</th><th></th></tr></thead>
     <tbody>${rows.length? rows.map(r=>`<tr>
       <td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td>
-      <td style="white-space:normal;max-width:240px">${esc(r.concepto)}</td>
+      <td style="white-space:normal;max-width:220px">${esc(r.concepto)}</td>
       <td>${mesLabel(mesKey(r.mes))}</td>
-      <td>${esc(r.grupo)}</td><td>${esc(r.categoria)}</td>
-      <td class="num">${money(r.monto)}</td>
+      <td>${esc(r.tipoServicio)}</td><td>${esc(r.categoria)}</td>
+      <td class="num">${money(r.monto)}</td><td>${esc(r.solicitadoPor)}</td>
       <td><div class="row-actions">
         <button class="btn sec sm" onclick='abrirGasto(${JSON.stringify(r.id)})'>✎</button>
         <button class="btn danger" onclick='borrarGasto(${JSON.stringify(r.id)})'>🗑</button>
-      </div></td></tr>`).join('') : `<tr><td colspan="8"><div class="empty">Aún no registras gastos. Agrégalos para calcular el margen real.</div></td></tr>`}</tbody>
+      </div></td></tr>`).join('') : `<tr><td colspan="9"><div class="empty">Aún no registras gastos. Agrégalos para calcular el margen real.</div></td></tr>`}</tbody>
   </table></div>`;
 }
 function abrirGasto(id){
-  const r=id? STATE.gastos.find(x=>x.id===id):{grupo:'Otros'};
+  const r=id? STATE.gastos.find(x=>x.id===id):{};
   const sel=(arr,v)=>['<option value=""></option>'].concat((arr||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`)).join('');
-  const cats = (r.grupo||'Otros').toLowerCase().startsWith('person')? CAT_PERSONAS : CAT_OTROS;
   const proyectosFact=[...new Set(STATE.fact.map(x=>x.servicio).filter(Boolean))].sort();
   showModal(`
     <h3>${id?'Editar':'Nuevo'} gasto</h3>
     <div class="grid2">
       <div class="field"><label>Cliente</label><select id="g_cliente">${sel(STATE.maestros.Cliente,r.cliente)}</select></div>
-      <div class="field"><label>Concepto (Tipo de SS)</label><select id="g_conc">${sel(STATE.maestros.Servicio,r.concepto)}</select></div>
+      <div class="field"><label>Tipo de Servicio</label><select id="g_tserv">${sel(STATE.maestros.Servicio,r.tipoServicio)}</select></div>
       <div class="field full"><label>Tipo de Servicios/Proyecto <span style="color:var(--muted);font-weight:400">— de facturación</span></label>
         <input id="g_tipo" list="fact-proyectos" value="${esc(r.tipo||'')}" placeholder="Escribe el proyecto y elige de la lista…" autocomplete="off">
         <datalist id="fact-proyectos">${proyectosFact.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist></div>
+      <div class="field full"><label>Concepto</label><input id="g_conc" value="${esc(r.concepto||'')}" placeholder="Descripción del gasto"></div>
       <div class="field"><label>Mes</label><input type="month" id="g_mes" value="${mesKey(r.mes)||''}"></div>
-      <div class="field"><label>Grupo</label><select id="g_grupo" onchange="cambiarGrupoGasto()"><option ${((r.grupo||'').toLowerCase().startsWith('person'))?'selected':''}>Personas</option><option ${(!(r.grupo||'').toLowerCase().startsWith('person'))?'selected':''}>Otros</option></select></div>
-      <div class="field"><label>Categoría</label><select id="g_cat">${sel(cats,r.categoria)}</select></div>
+      <div class="field"><label>Categoría</label><select id="g_cat">${sel(CAT_ALL,r.categoria)}</select></div>
       <div class="field"><label>Monto (S/)</label><input type="number" step="0.01" id="g_monto" value="${r.monto!=null?r.monto:''}"></div>
+      <div class="field"><label>Solicitado por</label><input id="g_sol" value="${esc(r.solicitadoPor||'')}" placeholder="Nombre"></div>
     </div>
     <div class="modal-actions">
       <button class="btn sec" onclick="cerrarModal()">Cancelar</button>
       <button class="btn" onclick='guardarGasto(${JSON.stringify(id||"")})'>Guardar</button>
     </div>`);
 }
-function cambiarGrupoGasto(){
-  const g=el('g_grupo').value;
-  const cats = g.toLowerCase().startsWith('person')? CAT_PERSONAS : CAT_OTROS;
-  el('g_cat').innerHTML=['<option value=""></option>'].concat((cats||[]).map(o=>`<option>${esc(o)}</option>`)).join('');
-}
 async function guardarGasto(id){
   const body={accion:'saveGasto', id:id||'', cliente:el('g_cliente').value, tipo:el('g_tipo').value,
-    concepto:el('g_conc').value, mes:(el('g_mes').value||'')+(el('g_mes').value?'-01':''), grupo:el('g_grupo').value,
-    categoria:el('g_cat').value, monto:el('g_monto').value};
-  if(!body.cliente||!body.tipo||!el('g_mes').value){ toast('Cliente, servicio y mes requeridos',true); return; }
+    concepto:el('g_conc').value, mes:(el('g_mes').value||'')+(el('g_mes').value?'-01':''), tipoServicio:el('g_tserv').value,
+    categoria:el('g_cat').value, monto:el('g_monto').value, solicitadoPor:el('g_sol').value};
+  if(!body.cliente||!body.tipo||!el('g_mes').value){ toast('Cliente, proyecto y mes requeridos',true); return; }
   cerrarModal();
   try{ await apiPost(body); toast('Gasto guardado'); await cargarTodo(); goView('gastos'); }
   catch(e){ toast(e.message,true); }
@@ -1334,10 +1330,10 @@ const PLANTILLAS = {
   },
   gasto: {
     nombre:'gastos',
-    headers:['Cliente','Tipo de Servicios/Proyecto','Concepto','Mes','Grupo','Categoria','Monto'],
-    ejemplo:['BAT','ENVIO DE DISPENSER A OXXO','ENVIOS','2026-07','Otros','Peaje','8000'],
+    headers:['Cliente','Tipo de Servicios/Proyecto','Concepto','Mes','Tipo de Servicio','Categoria','Monto','Solicitado por'],
+    ejemplo:['BAT','ENVIO DE DISPENSER A OXXO','Peaje ruta norte','2026-07','ENVIOS','Peaje','8000','Nicole Aguirre'],
     accion:'saveGastoBulk',
-    map:o=>({cliente:o['Cliente'],tipo:o['Tipo de Servicios/Proyecto']||o['Servicio']||o['Tipo'],concepto:o['Concepto']||o['Detalle'],mes:normMes(o['Mes']),grupo:(o['Grupo']||'Otros'),categoria:o['Categoria'],monto:parseMonto(o['Monto'])}),
+    map:o=>({cliente:o['Cliente'],tipo:o['Tipo de Servicios/Proyecto']||o['Servicio']||o['Tipo'],concepto:o['Concepto'],mes:normMes(o['Mes']),tipoServicio:o['Tipo de Servicio']||o['Concepto'],categoria:o['Categoria'],monto:parseMonto(o['Monto']),solicitadoPor:o['Solicitado por']}),
     valid:r=>r.cliente&&r.tipo&&r.mes,
   },
   merch: {
@@ -1450,8 +1446,8 @@ function tablaPreview(tipo,rows){
     head='<th>Cliente</th><th>Servicio</th><th>Mes</th><th class="num">Importe</th>';
     body=rows.map(r=>`<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td class="num">${money(r.importe)}</td></tr>`).join('');
   } else if(tipo==='gasto'){
-    head='<th>Cliente</th><th>Servicio</th><th>Mes</th><th>Grupo</th><th class="num">Monto</th>';
-    body=rows.map(r=>`<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td>${esc(r.grupo)}</td><td class="num">${money(r.monto)}</td></tr>`).join('');
+    head='<th>Cliente</th><th>Proyecto</th><th>Mes</th><th>Tipo de Servicio</th><th>Categoría</th><th class="num">Monto</th>';
+    body=rows.map(r=>`<tr><td>${esc(r.cliente)}</td><td>${esc(r.tipo)}</td><td>${esc(mesLabel(mesKey(r.mes)))}</td><td>${esc(r.tipoServicio)}</td><td>${esc(r.categoria)}</td><td class="num">${money(r.monto)}</td></tr>`).join('');
   } else if(tipo==='merch'){
     head='<th>Semana</th><th>Cadena</th><th>Zona</th><th class="num">Prog.</th><th class="num">Por prog.</th><th class="num">Efect.</th>';
     body=rows.map(r=>`<tr><td>${esc(semLabel(r.semana))}</td><td>${esc(r.cadena)}</td><td>${esc(r.zona)}</td><td class="num">${r.programado}</td><td class="num">${r.porprogramar}</td><td class="num">${r.efectivo}</td></tr>`).join('');
