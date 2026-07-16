@@ -81,7 +81,7 @@ function initSheets() {
                         'ANA SOFIA MOY','DIEGO LAZO','ARACELI','JACINTA','ANDREA ANDRADE',
                         'CHRIS BALVIN','FERNANDO SARRIA']);
     add('CatPersonas', ['Planilla Oficina','Planilla Campo']);
-    add('CatOtros',    ['Combustible','Peajes','Envíos','Transporte','Almacenaje','Otros']);
+    add('CatOtros',    ['Peaje','Cochera','Envíos','Embalaje','Combustible','Transporte','Almacenaje','Otros']);
     shM.getRange(2, 1, seed.length, 2).setValues(seed);
   }
   Logger.log('initSheets OK');

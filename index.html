@@ -176,6 +176,8 @@ const STATE = {
 };
 
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Set','Oct','Nov','Dic'];
+const CAT_OTROS = ['Peaje','Cochera','Envíos','Embalaje','Combustible','Transporte','Almacenaje','Otros'];
+const CAT_PERSONAS = ['Planilla Oficina','Planilla Campo'];
 
 // ════════ HELPERS ════════
 const $ = s => document.querySelector(s);
@@ -558,7 +560,7 @@ function renderGastos(c){
   const anios=aniosDisponibles();
   let rows=STATE.gastos.filter(r=>{
     if(f.cliente&&r.cliente!==f.cliente) return false;
-    if(f.servicio&&r.tipo!==f.servicio) return false;
+    if(f.concepto&&r.concepto!==f.concepto) return false;
     if(f.anio&&(r.mes||'').slice(0,4)!==f.anio) return false;
     return true;
   });
@@ -568,7 +570,7 @@ function renderGastos(c){
   c.innerHTML=`
   <div class="filters">
     <div class="field"><label>Cliente</label><select onchange="STATE._gFil.cliente=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
-    <div class="field"><label>Servicio</label><select onchange="STATE._gFil.servicio=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Servicio,f.servicio)}</select></div>
+    <div class="field"><label>Concepto (Tipo de SS)</label><select onchange="STATE._gFil.concepto=this.value;renderGastos(el('content'))">${opts(STATE.maestros.Servicio,f.concepto)}</select></div>
     <div class="field"><label>Año</label><select onchange="STATE._gFil.anio=this.value;renderGastos(el('content'))">${opts(anios,f.anio)}</select></div>
     <button class="btn sec" onclick="abrirCarga('gasto')">⬆ Cargar consolidado</button>
     <button class="btn" onclick="abrirGasto()">+ Nuevo gasto</button>
@@ -594,14 +596,17 @@ function renderGastos(c){
 }
 function abrirGasto(id){
   const r=id? STATE.gastos.find(x=>x.id===id):{grupo:'Otros'};
-  const sel=(arr,v)=>(arr||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`).join('');
-  const cats = (r.grupo||'Otros').toLowerCase().startsWith('person')? STATE.maestros.CatPersonas : STATE.maestros.CatOtros;
+  const sel=(arr,v)=>['<option value=""></option>'].concat((arr||[]).map(o=>`<option ${o===v?'selected':''}>${esc(o)}</option>`)).join('');
+  const cats = (r.grupo||'Otros').toLowerCase().startsWith('person')? CAT_PERSONAS : CAT_OTROS;
+  const proyectosFact=[...new Set(STATE.fact.map(x=>x.servicio).filter(Boolean))].sort();
   showModal(`
     <h3>${id?'Editar':'Nuevo'} gasto</h3>
     <div class="grid2">
       <div class="field"><label>Cliente</label><select id="g_cliente">${sel(STATE.maestros.Cliente,r.cliente)}</select></div>
-      <div class="field"><label>Tipo de Servicios/Proyecto</label><select id="g_tipo">${sel(STATE.maestros.Servicio,r.tipo)}</select></div>
-      <div class="field full"><label>Concepto</label><input id="g_conc" value="${esc(r.concepto||'')}" placeholder="Detalle del gasto"></div>
+      <div class="field"><label>Concepto (Tipo de SS)</label><select id="g_conc">${sel(STATE.maestros.Servicio,r.concepto)}</select></div>
+      <div class="field full"><label>Tipo de Servicios/Proyecto <span style="color:var(--muted);font-weight:400">— de facturación</span></label>
+        <input id="g_tipo" list="fact-proyectos" value="${esc(r.tipo||'')}" placeholder="Escribe el proyecto y elige de la lista…" autocomplete="off">
+        <datalist id="fact-proyectos">${proyectosFact.map(p=>`<option value="${esc(p)}"></option>`).join('')}</datalist></div>
       <div class="field"><label>Mes</label><input type="month" id="g_mes" value="${mesKey(r.mes)||''}"></div>
       <div class="field"><label>Grupo</label><select id="g_grupo" onchange="cambiarGrupoGasto()"><option ${((r.grupo||'').toLowerCase().startsWith('person'))?'selected':''}>Personas</option><option ${(!(r.grupo||'').toLowerCase().startsWith('person'))?'selected':''}>Otros</option></select></div>
       <div class="field"><label>Categoría</label><select id="g_cat">${sel(cats,r.categoria)}</select></div>
@@ -614,8 +619,8 @@ function abrirGasto(id){
 }
 function cambiarGrupoGasto(){
   const g=el('g_grupo').value;
-  const cats = g.toLowerCase().startsWith('person')? STATE.maestros.CatPersonas : STATE.maestros.CatOtros;
-  el('g_cat').innerHTML=(cats||[]).map(o=>`<option>${esc(o)}</option>`).join('');
+  const cats = g.toLowerCase().startsWith('person')? CAT_PERSONAS : CAT_OTROS;
+  el('g_cat').innerHTML=['<option value=""></option>'].concat((cats||[]).map(o=>`<option>${esc(o)}</option>`)).join('');
 }
 async function guardarGasto(id){
   const body={accion:'saveGasto', id:id||'', cliente:el('g_cliente').value, tipo:el('g_tipo').value,
@@ -1324,7 +1329,7 @@ const PLANTILLAS = {
   gasto: {
     nombre:'gastos',
     headers:['Cliente','Tipo de Servicios/Proyecto','Concepto','Mes','Grupo','Categoria','Monto'],
-    ejemplo:['BAT','ENVIOS','Combustible flota julio','2026-07','Otros','Combustible','8000'],
+    ejemplo:['BAT','ENVIO DE DISPENSER A OXXO','ENVIOS','2026-07','Otros','Peaje','8000'],
     accion:'saveGastoBulk',
     map:o=>({cliente:o['Cliente'],tipo:o['Tipo de Servicios/Proyecto']||o['Servicio']||o['Tipo'],concepto:o['Concepto']||o['Detalle'],mes:normMes(o['Mes']),grupo:(o['Grupo']||'Otros'),categoria:o['Categoria'],monto:parseMonto(o['Monto'])}),
     valid:r=>r.cliente&&r.tipo&&r.mes,
