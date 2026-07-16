@@ -994,7 +994,10 @@ function leadDias(a,b){ if(!a||!b) return null; const ms=new Date(b+'T00:00:00')
 function renderCompras(c){
   STATE._coFil = STATE._coFil || {};
   const f=STATE._coFil;
-  const allPptos = STATE.pptosCot.map(p=>({...p,fuente:'cotizador'})).concat(STATE.pptos.map(p=>({...p,fuente:'sheet'})));
+  // Sheet = guardados (editables). Cotizador en vivo = solo los que aún NO están en el Sheet (evita duplicar).
+  const idsSheet = new Set(STATE.pptos.map(p=>p.id));
+  const liveCot = STATE.pptosCot.filter(p=>!idsSheet.has(p.id)).map(p=>({...p,fuente:'cotizador'}));
+  const allPptos = liveCot.concat(STATE.pptos.map(p=>({...p,fuente:'sheet'})));
   const anios=[...new Set(allPptos.map(p=>(p.mesAprobado||'').slice(0,4)).concat(STATE.compras.map(x=>(x.fechaCompra||'').slice(0,4))).filter(Boolean))].sort().reverse();
   const anio=f.anio!==undefined?f.anio:(anios[0]||'');
   f.anio=anio;
@@ -1013,6 +1016,7 @@ function renderCompras(c){
   <div class="filters">
     <div class="field"><label>Año</label><select onchange="STATE._coFil.anio=this.value;renderCompras(el('merch-sub'))">${['<option value="">Todos</option>'].concat(anios.map(a=>`<option ${a===anio?'selected':''}>${a}</option>`)).join('')}</select></div>
     <div style="flex:1"></div>
+    ${liveCot.length?`<button class="btn" style="background:var(--gold);color:#3a2c00" onclick="sincronizarCotizador()">⬇ Guardar ${liveCot.length} del cotizador en el Sheet</button>`:''}
     <button class="btn sec" onclick="abrirPpto()">+ PPTO manual</button>
     <button class="btn sec" onclick="abrirCarga('compra')">⬆ Cargar compras</button>
     <button class="btn" onclick="abrirCompra()">+ Compra</button>
@@ -1075,6 +1079,20 @@ async function guardarPpto(id){
   try{ await apiPost(body); toast('PPTO guardado'); STATE._merchTab='compras'; await cargarTodo(); goView('merch'); }catch(e){ toast(e.message,true); }
 }
 async function borrarPpto(id){ if(!confirm('¿Borrar este PPTO aprobado?'))return; try{await apiPost({accion:'deletePpto',id});toast('Borrado');STATE._merchTab='compras';await cargarTodo();goView('merch');}catch(e){toast(e.message,true);} }
+async function sincronizarCotizador(){
+  const idsSheet=new Set(STATE.pptos.map(p=>p.id));
+  const pend=STATE.pptosCot.filter(p=>!idsSheet.has(p.id));
+  if(!pend.length){ toast('Nada nuevo que sincronizar'); return; }
+  toast('Guardando '+pend.length+' PPTOs en el Sheet…');
+  try{
+    for(const p of pend){
+      await apiPost({accion:'savePpto', id:p.id, nombre:p.nombre, mesAprobado:p.mesAprobado,
+        montoAprobado:p.montoAprobado, correo:p.correo, obs:''});
+    }
+    toast(pend.length+' PPTOs guardados en el Sheet ✓');
+    STATE._merchTab='compras'; await cargarTodo(); goView('merch');
+  }catch(e){ toast(e.message,true); }
+}
 
 function abrirCompra(id){
   const r=id?STATE.compras.find(x=>x.id===id):{};
