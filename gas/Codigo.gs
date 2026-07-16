@@ -34,7 +34,7 @@ const HDR_PKPI     = ['Cadena','Cobertura S1','Cobertura S2','Efectividad S1','E
 const HDR_PMAT     = ['ID','Cadena','Categoria','Material','Tiendas','Avance S1','Avance S2','Obs','Inicio','Fin'];
 const HDR_PINC     = ['ID','Cadena','Fecha','Incidencia','Responsable','Estado'];
 const HDR_COMPRA   = ['ID','PPTO','Material','Cantidad','Precio Unitario','Total','Fecha Compra','Cuenta','Obs'];
-const HDR_PPTO     = ['ID','Nombre','Mes Aprobado','Monto Aprobado','Obs'];
+const HDR_PPTO     = ['ID','Nombre','Mes Aprobado','Monto Aprobado','Correo','Obs'];
 
 // ── Spreadsheet (activo) ───────────────────────────────────────────
 function getSS() { return SpreadsheetApp.getActiveSpreadsheet(); }
@@ -282,7 +282,7 @@ function handleGet(e) {
     if (!sh) return jsonResp({ rows: [], count: 0 });
     const data = sh.getDataRange().getValues();
     const rows = data.slice(1).filter(r => r[0]).map(r => ({
-      id: s(r[0]), nombre: s(r[1]), mesAprobado: d(r[2]), montoAprobado: n(r[3]), obs: s(r[4]),
+      id: s(r[0]), nombre: s(r[1]), mesAprobado: d(r[2]), montoAprobado: n(r[3]), correo: s(r[4]), obs: s(r[5]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -500,7 +500,7 @@ function handlePost(e) {
     const b = body;
     if (!b.nombre) return jsonResp({ error: 'Nombre del PPTO requerido' });
     const id = b.id || ('A' + new Date().getTime());
-    const row = [id, b.nombre||'', b.mesAprobado||'', num(b.montoAprobado), b.obs||''];
+    const row = [id, b.nombre||'', b.mesAprobado||'', num(b.montoAprobado), b.correo||'', b.obs||''];
     const found = findRow(sh, id);
     if (found > 0) sh.getRange(found, 1, 1, HDR_PPTO.length).setValues([row]);
     else sh.appendRow(row);
