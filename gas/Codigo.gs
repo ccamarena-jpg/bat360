@@ -27,7 +27,7 @@ const SHEET_PPTO     = 'PptoAprobado';
 const HDR_FACT = ['ID','Cliente','Ejecutivo','Tipo de SS','Responsable de Pago',
   'Servicio / Proyecto','Mes','Importe','OS','Serie Factura','# Factura',
   'Fecha Factura','Fecha Vencimiento','Estado','Estado Detalle'];
-const HDR_GASTOS   = ['ID','Cliente','Tipo de SS','Mes','Grupo','Categoria','Monto','Detalle'];
+const HDR_GASTOS   = ['ID','Cliente','Tipo de Servicios/Proyecto','Concepto','Mes','Grupo','Categoria','Monto'];
 const HDR_MAESTROS = ['Tipo','Valor'];
 const HDR_CUOTAS   = ['Ejecutivo','Anio','Meta Q1','Meta Q2','Meta Q3','Meta Q4'];
 const HDR_MERCH    = ['ID','Semana','Tipo','Zona','Cadena','Programado','Por Programar','Efectivo','Obs'];
@@ -217,11 +217,11 @@ function handleGet(e) {
       id:        s(r[0]),
       cliente:   s(r[1]),
       tipo:      s(r[2]),
-      mes:       d(r[3]),
-      grupo:     s(r[4]),
-      categoria: s(r[5]),
-      monto:     n(r[6]),
-      detalle:   s(r[7]),
+      concepto:  s(r[3]),
+      mes:       d(r[4]),
+      grupo:     s(r[5]),
+      categoria: s(r[6]),
+      monto:     n(r[7]),
     }));
     return jsonResp({ rows, count: rows.length });
   }
@@ -394,8 +394,8 @@ function handlePost(e) {
     const b = body;
     if (!b.cliente || !b.tipo || !b.mes) return jsonResp({ error: 'Cliente, servicio y mes requeridos' });
     const id = b.id || ('G' + new Date().getTime());
-    const row = [id, b.cliente||'', b.tipo||'', b.mes||'', b.grupo||'Otros',
-      b.categoria||'', num(b.monto), b.detalle||''];
+    const row = [id, b.cliente||'', b.tipo||'', b.concepto||'', b.mes||'', b.grupo||'Otros',
+      b.categoria||'', num(b.monto)];
     const found = findRow(sh, id);
     if (found > 0) sh.getRange(found, 1, 1, HDR_GASTOS.length).setValues([row]);
     else sh.appendRow(row);
@@ -416,8 +416,8 @@ function handlePost(e) {
     if (!items.length) return jsonResp({ error: 'Sin filas para cargar' });
     const base = new Date().getTime();
     const rows = items.map((b, i) => [
-      b.id || ('G' + (base + i)), b.cliente||'', b.tipo||'', b.mes||'', b.grupo||'Otros',
-      b.categoria||'', num(b.monto), b.detalle||''
+      b.id || ('G' + (base + i)), b.cliente||'', b.tipo||'', b.concepto||'', b.mes||'', b.grupo||'Otros',
+      b.categoria||'', num(b.monto)
     ]);
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, HDR_GASTOS.length).setValues(rows);
     return jsonResp({ ok: true, added: rows.length });
