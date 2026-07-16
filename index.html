@@ -127,7 +127,7 @@
       <div class="sec">Facturación &amp; Gastos</div>
       <a data-view="facturacion"><span class="ico">🧾</span> Facturación</a>
       <a data-view="gastos"><span class="ico">💸</span> Gastos</a>
-      <a data-view="margen"><span class="ico">📈</span> Margen por servicio</a>
+      <a data-view="margen"><span class="ico">📈</span> Margen por proyecto</a>
       <div class="sec">Operaciones</div>
       <a data-view="promotoria"><span class="ico">🛒</span> Promotoría</a>
       <a data-view="merch"><span class="ico">📦</span> Merch</a>
@@ -247,7 +247,7 @@ const TITLES = {
   resumen:['Resumen','Visión 360 de la cuenta'],
   facturacion:['Facturación','Facturas por cliente y servicio'],
   gastos:['Gastos','Costos por servicio para el margen'],
-  margen:['Margen por servicio','Facturación − Gastos = Margen'],
+  margen:['Margen por proyecto','Facturación − Gastos por proyecto = Margen'],
   promotoria:['Promotoría','Cobertura, efectividad, materiales e incidencias por cadena'],
   merch:['Merch','Seguimiento semanal de OTs y proyectos'],
   calendario:['Calendario','Línea de tiempo de proyectos'],
@@ -292,22 +292,26 @@ function aniosDisponibles(){
   STATE.gastos.forEach(g=>{ if(g.mes) s.add(g.mes.slice(0,4)); });
   return [...s].filter(Boolean).sort().reverse();
 }
-// devuelve mapa por cliente|servicio|mes -> {fact, personas, otros}
+// devuelve mapa por cliente|grupo|mes -> {fact, personas, otros}
+// filtro.by: 'tipo' (Tipo de SS, default) | 'proyecto' (Servicio/Proyecto)
 function aggMargen(filtro={}){
+  const by = filtro.by || 'tipo';
   const map={};
   const k=(c,s,m)=>`${c}|||${s}|||${m}`;
   STATE.fact.forEach(f=>{
     if(filtro.anio && (f.mes||'').slice(0,4)!==filtro.anio) return;
     if(filtro.cliente && f.cliente!==filtro.cliente) return;
-    const key=k(f.cliente, f.tipo||'(sin servicio)', mesKey(f.mes));
-    (map[key]=map[key]||{cliente:f.cliente,servicio:f.tipo||'(sin servicio)',mes:mesKey(f.mes),fact:0,personas:0,otros:0});
+    const label = by==='proyecto' ? (f.servicio||'(sin proyecto)') : (f.tipo||'(sin servicio)');
+    const key=k(f.cliente, label, mesKey(f.mes));
+    (map[key]=map[key]||{cliente:f.cliente,servicio:label,mes:mesKey(f.mes),fact:0,personas:0,otros:0});
     map[key].fact += +f.importe||0;
   });
   STATE.gastos.forEach(g=>{
     if(filtro.anio && (g.mes||'').slice(0,4)!==filtro.anio) return;
     if(filtro.cliente && g.cliente!==filtro.cliente) return;
-    const key=k(g.cliente, g.tipo||'(sin servicio)', mesKey(g.mes));
-    (map[key]=map[key]||{cliente:g.cliente,servicio:g.tipo||'(sin servicio)',mes:mesKey(g.mes),fact:0,personas:0,otros:0});
+    const label = by==='proyecto' ? (g.tipo||'(sin proyecto)') : (g.concepto||g.tipo||'(sin servicio)');
+    const key=k(g.cliente, label, mesKey(g.mes));
+    (map[key]=map[key]||{cliente:g.cliente,servicio:label,mes:mesKey(g.mes),fact:0,personas:0,otros:0});
     if((g.grupo||'').toLowerCase().startsWith('person')) map[key].personas += +g.monto||0;
     else map[key].otros += +g.monto||0;
   });
@@ -645,9 +649,10 @@ function renderMargen(c){
   const anio=f.anio||anios[0]||'';
   f.anio=anio;
   const opts=(arr,sel)=>['<option value="">Todos</option>'].concat((arr||[]).map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`)).join('');
-  let ag=aggMargen({anio, cliente:f.cliente});
+  let ag=aggMargen({anio, cliente:f.cliente, by:'proyecto'});
+  if(f.q){ const q=f.q.toLowerCase(); ag=ag.filter(r=>(''+r.servicio).toLowerCase().includes(q)); }
 
-  // resumen por servicio (agregando meses)
+  // resumen por proyecto (agregando meses)
   const porServ={};
   ag.forEach(r=>{
     const k=r.cliente+' · '+r.servicio;
@@ -664,6 +669,7 @@ function renderMargen(c){
   <div class="filters">
     <div class="field"><label>Año</label><select onchange="STATE._mFil.anio=this.value;renderMargen(el('content'))">${opts(anios,anio).replace('<option value="">Todos</option>','')}</select></div>
     <div class="field"><label>Cliente</label><select onchange="STATE._mFil.cliente=this.value;renderMargen(el('content'))">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
+    <div class="field" style="flex:1;min-width:200px"><label>Buscar proyecto</label><input id="mg_q" value="${esc(f.q||'')}" placeholder="nombre del proyecto…" oninput="STATE._mFil.q=this.value;renderMargen(el('content'));const e=el('mg_q');if(e){e.focus();const v=e.value;e.value='';e.value=v;}"></div>
   </div>
   <div class="kpis">
     <div class="kpi"><div class="lbl">Facturado</div><div class="val">${money(tF)}</div></div>
@@ -673,9 +679,9 @@ function renderMargen(c){
   </div>
 
   <div class="panel">
-    <h3>📊 Margen por servicio <span class="tag">${anio} · acumulado</span></h3>
+    <h3>📊 Margen por proyecto <span class="tag">${anio} · acumulado</span></h3>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Cliente</th><th>Servicio</th><th class="num">Facturado</th><th class="num">G. Personas</th><th class="num">Otros</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
+      <thead><tr><th>Cliente</th><th>Proyecto (Servicio/Proyecto)</th><th class="num">Facturado</th><th class="num">G. Personas</th><th class="num">Otros</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
       <tbody>${serv.map(r=>{const m=r.fact-r.personas-r.otros;const p=r.fact?m/r.fact*100:0;return `<tr>
         <td>${esc(r.cliente)}</td><td>${esc(r.servicio)}</td>
         <td class="num">${money(r.fact)}</td><td class="num">${money(r.personas)}</td><td class="num">${money(r.otros)}</td>
@@ -687,7 +693,7 @@ function renderMargen(c){
   <div class="panel">
     <h3>📅 Detalle por mes</h3>
     <div class="tbl-wrap"><table>
-      <thead><tr><th>Mes</th><th>Cliente</th><th>Servicio</th><th class="num">Facturado</th><th class="num">Gastos</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
+      <thead><tr><th>Mes</th><th>Cliente</th><th>Proyecto</th><th class="num">Facturado</th><th class="num">Gastos</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
       <tbody>${detalle.map(r=>{const g=r.personas+r.otros;const m=r.fact-g;const p=r.fact?m/r.fact*100:0;return `<tr>
         <td>${mesLabel(r.mes)}</td><td>${esc(r.cliente)}</td><td>${esc(r.servicio)}</td>
         <td class="num">${money(r.fact)}</td><td class="num">${money(g)}</td>
