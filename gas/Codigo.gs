@@ -104,23 +104,50 @@ function handleGet(e) {
     const sh = ss.getSheetByName(SHEET_FACT);
     if (!sh) return jsonResp({ rows: [], count: 0 });
     const data = sh.getDataRange().getValues();
-    const rows = data.slice(1).filter(r => r[1]).map(r => ({
-      id:        s(r[0]),
-      cliente:   s(r[1]),
-      ejecutivo: s(r[2]),
-      tipo:      s(r[3]),
-      responsable: s(r[4]),
-      servicio:  s(r[5]),
-      mes:       d(r[6]),
-      importe:   n(r[7]),
-      os:        s(r[8]),
-      serie:     s(r[9]),
-      factura:   s(r[10]),
-      fechaFactura:  d(r[11]),
-      fechaVenc:     d(r[12]),
-      estado:    s(r[13]),
-      estadoDetalle: s(r[14]),
-    }));
+    if (data.length < 2) return jsonResp({ rows: [], count: 0 });
+    // Mapea por NOMBRE de encabezado (tolerante a orden, mayúsculas y acentos)
+    const find = colFinder(data[0]);
+    const ci = {
+      id:            find(['ID']),
+      cliente:       find(['Cliente']),
+      ejecutivo:     find(['Ejecutivo']),
+      tipo:          find(['Tipo de SS','Tipo SS','Tipo']),
+      responsable:   find(['Responsable de Pago','Responsable']),
+      servicio:      find(['Servicio / Proyecto','Servicio Proyecto','Servicio','Proyecto']),
+      mes:           find(['Mes']),
+      importe:       find(['Importe','Monto']),
+      os:            find(['OS']),
+      serie:         find(['Serie Factura','Serie']),
+      factura:       find(['# Factura','N Factura','Nro Factura','Numero Factura','Factura']),
+      fechaFactura:  find(['Fecha de Factura','Fecha Factura']),
+      fechaVenc:     find(['Fecha de Vencimiento','Fecha Vencimiento','Vencimiento']),
+      estado:        find(['Estado (Pagado)','Estado Pagado','Estado']),
+      estadoDetalle: find(['Estado Detalle','Detalle Estado','Detalle']),
+    };
+    const g = (r, k) => ci[k] >= 0 ? r[ci[k]] : '';
+    const cCli = ci.cliente >= 0 ? ci.cliente : 0;
+    const rows = [];
+    for (var i = 1; i < data.length; i++) {
+      const r = data[i];
+      if (!s(r[cCli])) continue;               // salta filas sin cliente
+      rows.push({
+        id:            (ci.id >= 0 && s(r[ci.id])) ? s(r[ci.id]) : ('F' + i),
+        cliente:       s(g(r, 'cliente')),
+        ejecutivo:     s(g(r, 'ejecutivo')),
+        tipo:          s(g(r, 'tipo')),
+        responsable:   s(g(r, 'responsable')),
+        servicio:      s(g(r, 'servicio')),
+        mes:           d(g(r, 'mes')),
+        importe:       n(g(r, 'importe')),
+        os:            s(g(r, 'os')),
+        serie:         s(g(r, 'serie')),
+        factura:       s(g(r, 'factura')),
+        fechaFactura:  d(g(r, 'fechaFactura')),
+        fechaVenc:     d(g(r, 'fechaVenc')),
+        estado:        s(g(r, 'estado')),
+        estadoDetalle: s(g(r, 'estadoDetalle')),
+      });
+    }
     return jsonResp({ rows, count: rows.length });
   }
 
@@ -524,8 +551,39 @@ function findRow(sh, id) {
 }
 
 function s(v)   { return v === null || v === undefined ? '' : v.toString().trim(); }
-function n(v)   { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
-function num(v) { const x = parseFloat(v); return isNaN(x) ? 0 : x; }
+
+// Número robusto: acepta number real o texto (incl. formato PE "1.250,50" y "S/")
+function n(v) {
+  if (typeof v === 'number') return v;
+  var str = s(v).replace(/\s/g, '').replace(/[^0-9.,\-]/g, '');
+  if (!str) return 0;
+  var hasC = str.indexOf(',') >= 0, hasD = str.indexOf('.') >= 0;
+  if (hasC && hasD) {
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) str = str.replace(/\./g, '').replace(',', '.');
+    else str = str.replace(/,/g, '');
+  } else if (hasC) {
+    str = str.replace(',', '.');
+  }
+  var x = parseFloat(str);
+  return isNaN(x) ? 0 : x;
+}
+function num(v) { return n(v); }
+
+// Localiza columnas por nombre de encabezado (normaliza mayúsculas/acentos/símbolos)
+function colFinder(headerRow) {
+  var norm = function (x) {
+    return s(x).toUpperCase()
+      .replace(/[ÁÀÄÂ]/g, 'A').replace(/[ÉÈÊ]/g, 'E').replace(/[ÍÌÎ]/g, 'I')
+      .replace(/[ÓÒÔ]/g, 'O').replace(/[ÚÙÛ]/g, 'U').replace(/Ñ/g, 'N')
+      .replace(/[^A-Z0-9]/g, '');
+  };
+  var idx = {};
+  headerRow.forEach(function (h, i) { var k = norm(h); if (k && !(k in idx)) idx[k] = i; });
+  return function (aliases) {
+    for (var j = 0; j < aliases.length; j++) { var k = norm(aliases[j]); if (k in idx) return idx[k]; }
+    return -1;
+  };
+}
 
 // Zona horaria del sheet (cacheada) — evita el corrimiento de 1 día
 var _TZ;
