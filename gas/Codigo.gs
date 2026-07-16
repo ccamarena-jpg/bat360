@@ -85,6 +85,42 @@ function initSheets() {
   return 'OK — pestañas y catálogos creados';
 }
 
+// ── Asignar IDs a todas las filas de Facturacion (ejecutar 1 vez) ──
+// Crea la columna ID al inicio si no existe y rellena las vacías.
+function asignarIDsFacturacion() {
+  const sh = getSS().getSheetByName(SHEET_FACT);
+  if (!sh) { Logger.log('No existe la pestaña ' + SHEET_FACT); return 'No existe la pestaña ' + SHEET_FACT; }
+  const lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  if (lastRow < 2) return 'Sin datos que numerar';
+
+  const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  let idCol = colFinder(headers)(['ID']);   // 0-based, -1 si no existe
+  if (idCol < 0) {
+    sh.insertColumnBefore(1);
+    sh.getRange(1, 1).setValue('ID').setFontWeight('bold')
+      .setBackground('#1d3b78').setFontColor('#ffffff');
+    idCol = 0;
+  }
+  const col = idCol + 1;                     // 1-based
+  const nData = lastRow - 1;
+  const ids = sh.getRange(2, col, nData, 1).getValues();
+
+  const existing = {};
+  ids.forEach(function (r) { if (r[0] !== '' && r[0] != null) existing[s(r[0])] = true; });
+
+  let seq = 0, count = 0;
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i][0] === '' || ids[i][0] == null) {
+      let cand;
+      do { seq++; cand = 'F' + ('0000' + seq).slice(-4); } while (existing[cand]);
+      ids[i][0] = cand; existing[cand] = true; count++;
+    }
+  }
+  sh.getRange(2, col, nData, 1).setValues(ids);
+  Logger.log('IDs asignados: ' + count + ' (columna ' + col + ')');
+  return 'OK — ' + count + ' IDs asignados';
+}
+
 // ════════════════════════════════════════════════════════════════════
 //  GET
 // ════════════════════════════════════════════════════════════════════
