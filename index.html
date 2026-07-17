@@ -302,6 +302,7 @@ function aggMargen(filtro={}){
   STATE.fact.forEach(f=>{
     if(filtro.anio && (f.mes||'').slice(0,4)!==filtro.anio) return;
     if(filtro.cliente && f.cliente!==filtro.cliente) return;
+    if(filtro.tipoSS && f.tipo!==filtro.tipoSS) return;
     const label = by==='proyecto' ? (f.servicio||'(sin proyecto)') : (f.tipo||'(sin servicio)');
     const key=k(f.cliente, label, mesKey(f.mes));
     (map[key]=map[key]||{cliente:f.cliente,servicio:label,mes:mesKey(f.mes),fact:0,personas:0,otros:0});
@@ -310,6 +311,7 @@ function aggMargen(filtro={}){
   STATE.gastos.forEach(g=>{
     if(filtro.anio && (g.mes||'').slice(0,4)!==filtro.anio) return;
     if(filtro.cliente && g.cliente!==filtro.cliente) return;
+    if(filtro.tipoSS && g.tipoServicio!==filtro.tipoSS) return;
     const label = by==='proyecto' ? (g.tipo||'(sin proyecto)') : (g.tipoServicio||'(sin servicio)');
     const key=k(g.cliente, label, mesKey(g.mes));
     (map[key]=map[key]||{cliente:g.cliente,servicio:label,mes:mesKey(g.mes),fact:0,personas:0,otros:0});
@@ -645,8 +647,10 @@ function renderMargen(c){
   const anio=f.anio||anios[0]||'';
   f.anio=anio;
   const opts=(arr,sel)=>['<option value="">Todos</option>'].concat((arr||[]).map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`)).join('');
-  let ag=aggMargen({anio, cliente:f.cliente, by:'proyecto'});
+  let ag=aggMargen({anio, cliente:f.cliente, tipoSS:f.tipoSS, by:'proyecto'});
   if(f.q){ const q=f.q.toLowerCase(); ag=ag.filter(r=>(''+r.servicio).toLowerCase().includes(q)); }
+  const mesesDisp=[...new Set(ag.map(r=>r.mes))].filter(Boolean).sort();
+  if(f.mes){ ag=ag.filter(r=>r.mes===f.mes); }
 
   // resumen por proyecto (agregando meses)
   const porServ={};
@@ -659,13 +663,13 @@ function renderMargen(c){
   const tF=serv.reduce((a,b)=>a+b.fact,0), tP=serv.reduce((a,b)=>a+b.personas,0), tO=serv.reduce((a,b)=>a+b.otros,0);
   const tM=tF-tP-tO;
 
-  const detalle = ag.sort((a,b)=> a.mes<b.mes?1:-1 || (b.fact-a.fact));
-
   c.innerHTML=`
   <div class="filters">
-    <div class="field"><label>Año</label><select onchange="STATE._mFil.anio=this.value;renderMargen(el('content'))">${opts(anios,anio).replace('<option value="">Todos</option>','')}</select></div>
+    <div class="field"><label>Año</label><select onchange="STATE._mFil.anio=this.value;STATE._mFil.mes='';renderMargen(el('content'))">${opts(anios,anio).replace('<option value="">Todos</option>','')}</select></div>
+    <div class="field"><label>Mes</label><select onchange="STATE._mFil.mes=this.value;renderMargen(el('content'))"><option value="">Todos</option>${mesesDisp.map(m=>`<option value="${m}" ${m===f.mes?'selected':''}>${mesLabel(m)}</option>`).join('')}</select></div>
     <div class="field"><label>Cliente</label><select onchange="STATE._mFil.cliente=this.value;renderMargen(el('content'))">${opts(STATE.maestros.Cliente,f.cliente)}</select></div>
-    <div class="field" style="flex:1;min-width:200px"><label>Buscar proyecto</label><input id="mg_q" value="${esc(f.q||'')}" placeholder="nombre del proyecto…" oninput="STATE._mFil.q=this.value;renderMargen(el('content'));const e=el('mg_q');if(e){e.focus();const v=e.value;e.value='';e.value=v;}"></div>
+    <div class="field"><label>Tipo de Servicio</label><select onchange="STATE._mFil.tipoSS=this.value;renderMargen(el('content'))">${opts(STATE.maestros.Servicio,f.tipoSS)}</select></div>
+    <div class="field" style="flex:1;min-width:180px"><label>Buscar proyecto</label><input id="mg_q" value="${esc(f.q||'')}" placeholder="nombre del proyecto…" oninput="STATE._mFil.q=this.value;renderMargen(el('content'));const e=el('mg_q');if(e){e.focus();const v=e.value;e.value='';e.value=v;}"></div>
   </div>
   <div class="kpis">
     <div class="kpi"><div class="lbl">Facturado</div><div class="val">${money(tF)}</div></div>
@@ -684,17 +688,6 @@ function renderMargen(c){
         <td class="num ${m>=0?'pos':'neg'}">${money(m)}</td><td class="num ${p>=0?'pos':'neg'}">${p.toFixed(1)}%</td></tr>`;}).join('')||'<tr><td colspan="7"><div class="empty">Sin datos</div></td></tr>'}</tbody>
     </table></div>
     <p class="muted" style="margin-top:10px;font-size:11.5px">⚠ El margen solo es real cuando cargas los gastos en el módulo <b>Gastos</b>. Hoy tienes ${STATE.gastos.length} gastos registrados.</p>
-  </div>
-
-  <div class="panel">
-    <h3>📅 Detalle por mes</h3>
-    <div class="tbl-wrap"><table>
-      <thead><tr><th>Mes</th><th>Cliente</th><th>Proyecto</th><th class="num">Facturado</th><th class="num">Gastos</th><th class="num">Margen</th><th class="num">%</th></tr></thead>
-      <tbody>${detalle.map(r=>{const g=r.personas+r.otros;const m=r.fact-g;const p=r.fact?m/r.fact*100:0;return `<tr>
-        <td>${mesLabel(r.mes)}</td><td>${esc(r.cliente)}</td><td>${esc(r.servicio)}</td>
-        <td class="num">${money(r.fact)}</td><td class="num">${money(g)}</td>
-        <td class="num ${m>=0?'pos':'neg'}">${money(m)}</td><td class="num ${p>=0?'pos':'neg'}">${p.toFixed(1)}%</td></tr>`;}).join('')||'<tr><td colspan="7"><div class="empty">Sin datos</div></td></tr>'}</tbody>
-    </table></div>
   </div>`;
 }
 
