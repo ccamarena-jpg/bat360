@@ -107,6 +107,37 @@ function agregarColumnaCorreo() {
   return 'OK — columna Correo agregada.';
 }
 
+// ── Revisar filas con Tipo de SS no estándar en Facturacion ──
+// Lista en el registro las filas cuyo "Tipo de SS" no es un servicio válido
+// (p.ej. "DIEGO LAZO", "ENVIO") para que las corrijas manualmente.
+function revisarTiposFacturacion() {
+  const sh = getSS().getSheetByName(SHEET_FACT);
+  if (!sh) return 'No existe la pestaña ' + SHEET_FACT;
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return 'Sin datos';
+  const find = colFinder(data[0]);
+  const ct = find(['Tipo de SS', 'Tipo de Servicios/Proyecto', 'Tipo']);
+  const csv = find(['Servicio / Proyecto', 'Servicio']);
+  const cim = find(['Importe', 'Monto']);
+  const cf = find(['# Factura', 'Factura']);
+  if (ct < 0) return 'No encontré la columna "Tipo de SS".';
+  const VALIDOS = {'ENVIOS':1,'OTROS':1,'CONTRATO - FEE + PERSONAL':1,'ADMINISTRATIVOS':1,'ALMACENAJE':1,'TRANSPORTE':1,'PROMOTORIA':1,'MERCH':1};
+  let n = 0;
+  for (var i = 1; i < data.length; i++) {
+    var t = s(data[i][ct]).toUpperCase();
+    if (!t) continue;
+    if (!VALIDOS[t]) {
+      n++;
+      Logger.log('Fila ' + (i + 1) + ' | Tipo="' + s(data[i][ct]) + '"'
+        + ' | Servicio/Proyecto="' + (csv >= 0 ? s(data[i][csv]) : '') + '"'
+        + ' | Importe=' + (cim >= 0 ? s(data[i][cim]) : '')
+        + ' | #Factura=' + (cf >= 0 ? s(data[i][cf]) : ''));
+    }
+  }
+  Logger.log('== Filas con Tipo de SS NO estándar: ' + n + ' ==');
+  return 'Listo. Revisa Ver → Registro de ejecución. Filas no estándar: ' + n;
+}
+
 // ── Asignar IDs a todas las filas de Facturacion (ejecutar 1 vez) ──
 // Crea la columna ID al inicio si no existe y rellena las vacías.
 function asignarIDsFacturacion() {
