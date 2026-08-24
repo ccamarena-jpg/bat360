@@ -224,7 +224,10 @@ async function fetchCotizaciones(){
       // Mes de facturación real (viene como MM/YYYY); si falta, usa el mes del correo
       const mf = (''+(c.mes_facturacion||'')).trim().match(/^(\d{1,2})[\/\-](\d{4})$/);
       const mesFact = mf ? (mf[2]+'-'+mf[1].padStart(2,'0')+'-01') : mes;
-      return { id:'COT-'+(c.num_cotizacion||c.id), numCot:(c.num_cotizacion||''+c.id), nombre:c.nombre_proyecto||c.correo||'(sin nombre)',
+      // ID estable: num_cotizacion ya viene como "COT-2026-..."; no dupliques el prefijo
+      const rawNum = (''+(c.num_cotizacion||'')).trim();
+      const cotId = rawNum ? (/^COT-/i.test(rawNum) ? rawNum : 'COT-'+rawNum) : ('COT-'+c.id);
+      return { id:cotId, numCot:(rawNum||(''+c.id)), nombre:c.nombre_proyecto||c.correo||'(sin nombre)',
                mesAprobado:mes, mesFacturacion:mesFact, montoAprobado:+c.ppto_con_fee||0, correo:c.correo||'',
                solicitante:c.solicitante||'', facturaNum:c.factura||'', obs:'', fuente:'cotizador', _fecha:fe };
     }).filter(p => p._fecha && p._fecha >= hoyISO);          // solo nuevos de hoy en adelante
