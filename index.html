@@ -1110,10 +1110,8 @@ function leadDias(a,b){ if(!a||!b) return null; const ms=new Date(b+'T00:00:00')
 function renderCompras(c){
   STATE._coFil = STATE._coFil || {};
   const f=STATE._coFil;
-  // Sheet = guardados (editables). Cotizador en vivo = solo los que aún NO están en el Sheet (evita duplicar).
-  const idsSheet = new Set(STATE.pptos.map(p=>p.id));
-  const liveCot = STATE.pptosCot.filter(p=>!idsSheet.has(p.id)).map(p=>({...p,fuente:'cotizador'}));
-  const allPptos = liveCot.concat(STATE.pptos.map(p=>({...p,fuente:'sheet'})));
+  // Solo PPTOs manuales del Sheet. Los PPTOs aprobados del Cotizador ahora van a Facturación (no aquí).
+  const allPptos = STATE.pptos.map(p=>({...p,fuente:'sheet'}));
   const anios=[...new Set(allPptos.map(p=>(p.mesAprobado||'').slice(0,4)).concat(STATE.compras.map(x=>(x.fechaCompra||'').slice(0,4))).filter(Boolean))].sort().reverse();
   const anio=f.anio!==undefined?f.anio:(anios[0]||'');
   f.anio=anio;
@@ -1126,26 +1124,24 @@ function renderCompras(c){
   const totCosto=compras.reduce((a,b)=>a+(+b.total||0),0);
   const margen=totAprob-totCosto;
   const pctM=totAprob? margen/totAprob*100 : 0;
-  const nCot=pptos.filter(p=>p.fuente==='cotizador').length;
 
   c.innerHTML=`
   <div class="filters">
     <div class="field"><label>Año</label><select onchange="STATE._coFil.anio=this.value;renderCompras(el('merch-sub'))">${['<option value="">Todos</option>'].concat(anios.map(a=>`<option ${a===anio?'selected':''}>${a}</option>`)).join('')}</select></div>
     <div style="flex:1"></div>
-    ${liveCot.length?`<button class="btn" style="background:var(--gold);color:#3a2c00" onclick="sincronizarCotizador()">⬇ Guardar ${liveCot.length} del cotizador en el Sheet</button>`:''}
     <button class="btn sec" onclick="abrirPpto()">+ PPTO manual</button>
     <button class="btn sec" onclick="abrirCarga('compra')">⬆ Cargar compras</button>
     <button class="btn" onclick="abrirCompra()">+ Compra</button>
   </div>
   <div class="kpis">
-    <div class="kpi"><div class="lbl">PPTO aprobado${anio?' · '+anio:''}</div><div class="val">${money(totAprob)}</div><div class="hint">${pptos.length} pptos · 🔗 ${nCot} del cotizador</div></div>
+    <div class="kpi"><div class="lbl">PPTO aprobado${anio?' · '+anio:''}</div><div class="val">${money(totAprob)}</div><div class="hint">${pptos.length} pptos manuales</div></div>
     <div class="kpi"><div class="lbl">Costo real materiales</div><div class="val">${money(totCosto)}</div><div class="hint">${compras.length} compras</div></div>
     <div class="kpi"><div class="lbl">Margen del servicio</div><div class="val ${margen>=0?'pos':'neg'}">${money(margen)}</div><div class="hint">Aprobado − Costo</div></div>
     <div class="kpi"><div class="lbl">% Margen</div><div class="val ${pctM>=0?'pos':'neg'}">${pctM.toFixed(1)}%</div></div>
   </div>
 
   <div class="panel">
-    <h3>💰 PPTO aprobado vs costo real <span class="tag">🔗 ${nCot} del Cotizador (aprobados, desde hoy)</span></h3>
+    <h3>💰 PPTO aprobado vs costo real <span class="tag">PPTOs manuales · los del Cotizador van a Facturación</span></h3>
     <div class="tbl-wrap"><table>
       <thead><tr><th>PPTO / Proyecto</th><th>Correo</th><th>Mes</th><th class="num">Aprobado (c/fee)</th><th class="num">Costo real</th><th class="num">Margen</th><th class="num">%</th><th></th></tr></thead>
       <tbody>${pptos.length? pptos.map(p=>{const costo=costoDe(p.nombre);const m=(+p.montoAprobado||0)-costo;const pc=p.montoAprobado?m/p.montoAprobado*100:0;const cot=p.fuente==='cotizador';return `<tr>
@@ -1155,7 +1151,7 @@ function renderCompras(c){
         <td class="num">${money(p.montoAprobado)}</td><td class="num">${money(costo)}</td>
         <td class="num ${m>=0?'pos':'neg'}">${money(m)}</td><td class="num ${pc>=0?'pos':'neg'}">${pc.toFixed(1)}%</td>
         <td>${cot?'<span class="muted" title="Administrado en el Cotizador">🔒</span>':`<div class="row-actions"><button class="btn sec sm" onclick='abrirPpto(${JSON.stringify(p.id)})'>✎</button><button class="btn danger" onclick='borrarPpto(${JSON.stringify(p.id)})'>🗑</button></div>`}</td>
-      </tr>`;}).join('') : `<tr><td colspan="8"><div class="empty">Sin PPTOs por ahora. Se jalan del Cotizador (aprobados, de hoy en adelante) o créalos con <b>+ PPTO manual</b>.</div></td></tr>`}</tbody>
+      </tr>`;}).join('') : `<tr><td colspan="8"><div class="empty">Sin PPTOs manuales. Créalos con <b>+ PPTO manual</b>. Los PPTOs aprobados del Cotizador ahora aparecen en <b>Facturación</b>.</div></td></tr>`}</tbody>
     </table></div>
   </div>
 
@@ -1195,24 +1191,9 @@ async function guardarPpto(id){
   try{ await apiPost(body); toast('PPTO guardado'); STATE._merchTab='compras'; await cargarTodo(); goView('merch'); }catch(e){ toast(e.message,true); }
 }
 async function borrarPpto(id){ if(!confirm('¿Borrar este PPTO aprobado?'))return; try{await apiPost({accion:'deletePpto',id});toast('Borrado');STATE._merchTab='compras';await cargarTodo();goView('merch');}catch(e){toast(e.message,true);} }
-async function sincronizarCotizador(){
-  const idsSheet=new Set(STATE.pptos.map(p=>p.id));
-  const pend=STATE.pptosCot.filter(p=>!idsSheet.has(p.id));
-  if(!pend.length){ toast('Nada nuevo que sincronizar'); return; }
-  toast('Guardando '+pend.length+' PPTOs en el Sheet…');
-  try{
-    for(const p of pend){
-      await apiPost({accion:'savePpto', id:p.id, nombre:p.nombre, mesAprobado:p.mesAprobado,
-        montoAprobado:p.montoAprobado, correo:p.correo, obs:''});
-    }
-    toast(pend.length+' PPTOs guardados en el Sheet ✓');
-    STATE._merchTab='compras'; await cargarTodo(); goView('merch');
-  }catch(e){ toast(e.message,true); }
-}
-
 function abrirCompra(id){
   const r=id?STATE.compras.find(x=>x.id===id):{};
-  const pptoNombres=[...new Set(STATE.pptosCot.concat(STATE.pptos).map(p=>p.nombre).filter(Boolean))];
+  const pptoNombres=[...new Set(STATE.pptos.map(p=>p.nombre).filter(Boolean))];
   const pptoOpts=['<option value="">— Sin PPTO —</option>'].concat(pptoNombres.map(nom=>`<option ${nom===r.ppto?'selected':''}>${esc(nom)}</option>`)).join('');
   showModal(`<h3>${id?'Editar':'Nueva'} compra de material</h3>
     <div class="grid2">
