@@ -280,7 +280,7 @@ const TITLES = {
   facturacion:['Facturación','Facturas por cliente y servicio'],
   gastos:['Gastos','Costos por servicio para el margen'],
   margen:['Margen por proyecto','Facturación − Gastos por proyecto = Margen'],
-  promotoria:['Promotoría','Cobertura, efectividad, materiales e incidencias por cadena'],
+  promotoria:['Promotoría','KPIs por cadena · Radar de cobertura desde VALIDACIÓN_2026.xlsx'],
   merch:['Merch','Seguimiento semanal de OTs y proyectos'],
   calendario:['Calendario','Línea de tiempo de proyectos'],
   config:['Configuración','Conexión con Google Sheets'],
@@ -984,6 +984,38 @@ async function borrarProyecto(id){
 
 // ════════ VISTA: PROMOTORÍA ════════
 function renderPromotoria(c){
+  STATE._promoTab = STATE._promoTab || 'cadena';
+  const ptab = STATE._promoTab;
+  const subtabs = `<div class="tabs" style="margin-bottom:18px;border-bottom:1px solid var(--line);padding-bottom:14px">
+    <button class="${ptab==='cadena'?'active':''}" onclick="STATE._promoTab='cadena';renderPromotoria(el('content'))">📊 Por cadena</button>
+    <button class="${ptab==='radar'?'active':''}" onclick="STATE._promoTab='radar';renderPromotoria(el('content'))">📡 Radar de cobertura (Excel)</button>
+  </div>`;
+
+  if(ptab==='radar'){
+    // Ajuste de altura del iframe (el radar reporta su scrollHeight por postMessage)
+    if(!window.__radarMsg){
+      window.__radarMsg = true;
+      window.addEventListener('message', ev=>{
+        if(ev.data && ev.data.__radar==='height'){
+          const fr = el('radarFrame');
+          if(fr && ev.data.h) fr.style.height = (ev.data.h + 24) + 'px';
+        }
+      });
+    }
+    c.innerHTML = subtabs + `<div class="panel" style="padding:0;overflow:hidden">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--line)">
+        <h3 style="margin:0">📡 Radar de cobertura de promotoría</h3>
+        <p class="muted" style="margin-top:6px;font-size:12.5px;line-height:1.5">
+          Sube el archivo <code>VALIDACIÓN_2026.xlsx</code> (hojas <code>POS Q1</code> / <code>POS Q2</code>) para ver qué promotores no visitan todas sus tiendas, tiendas sin cobertura y motivos de no efectividad.
+          El archivo se procesa <b>en tu navegador</b>; no se guarda en la plataforma ni en el Google Sheet.
+        </p>
+      </div>
+      <iframe id="radarFrame" src="radar.html" title="Radar de cobertura" loading="lazy"
+        style="width:100%;border:none;display:block;min-height:900px"></iframe>
+    </div>`;
+    return;
+  }
+
   const CADENAS=['Ava','Oxxo','Repsol','Primax','Tambo'];
   STATE._promoCad = STATE._promoCad || 'Ava';
   const cad = STATE._promoCad;
@@ -994,7 +1026,7 @@ function renderPromotoria(c){
   const pct=(a,b)=> b? Math.round(a/b*100):0;
   const kv=v=> (v!=null&&v!=='')? v+'%':'·';
 
-  c.innerHTML=`
+  c.innerHTML= subtabs + `
   <div class="tabs">${CADENAS.map(x=>`<button class="${x===cad?'active':''}" onclick="STATE._promoCad='${x}';renderPromotoria(el('content'))">${x}</button>`).join('')}</div>
 
   <div class="panel">
