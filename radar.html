@@ -124,6 +124,26 @@ details.settings summary::-webkit-details-marker{display:none;}
 .filter-field select:disabled{opacity:.55; cursor:not-allowed;}
 .filter-hint{font-size:12px; color:var(--text-muted); align-self:center;}
 
+/* multiselect de semanas */
+.ms{position:relative;}
+.ms-btn{
+  font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); min-width:230px; text-align:left; cursor:pointer; display:flex; gap:8px; align-items:center;
+}
+.ms-btn:disabled{opacity:.55; cursor:not-allowed;}
+.ms-btn .caret{margin-left:auto; color:var(--text-muted);}
+.ms-panel{
+  position:absolute; z-index:30; top:calc(100% + 4px); left:0; min-width:260px; max-height:300px; overflow:auto;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); padding:6px;
+}
+.ms-panel label{
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:13px; color:var(--text);
+  cursor:pointer; font-weight:500; text-transform:none; letter-spacing:0;
+}
+.ms-panel label:hover{background:var(--surface-2);}
+.ms-panel .ms-sep{height:1px; background:var(--border); margin:5px 2px;}
+.ms-panel input[type=checkbox]{width:auto; margin:0; accent-color:var(--accent);}
+
 .sample-banner{
   display:flex; gap:10px; align-items:center; background:var(--warn-bg); color:var(--warn);
   border:1px solid var(--warn); border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:20px;
@@ -241,8 +261,11 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 
 <div class="filter-bar">
   <div class="filter-field">
-    <label for="filterWeek">Semana</label>
-    <select id="filterWeek" disabled><option value="ALL">Todas las semanas</option></select>
+    <label>Semanas</label>
+    <div class="ms">
+      <button type="button" class="ms-btn" id="weekBtn" disabled><span id="weekBtnLabel">Todas las semanas</span><span class="caret">▾</span></button>
+      <div class="ms-panel" id="weekPanel" hidden></div>
+    </div>
   </div>
   <div class="filter-field">
     <label for="filterPromotor">Promotor</label>
@@ -539,7 +562,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 
   // ---------- state ----------
   var cfg = {weeks:8, green:95, red:75, racha:2};
-  var state = { rawRecords:null, windowed:[], maxDate:null, windowStart:null, isSample:true };
+  var state = { rawRecords:null, windowed:[], maxDate:null, windowStart:null, isSample:true, weekSel:[] };
   var lastResult = null, lastMotivo = [];
 
   function loadCfg(){
@@ -570,27 +593,66 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     return "crit";
   }
 
+  function weekLabel(startDate){
+    if(!startDate) return "";
+    var end = new Date(startDate.getTime()+6*24*3600*1000);
+    return fmtDate(startDate)+" – "+fmtDate(end);
+  }
+  function updateWeekBtnLabel(){
+    var lbl = document.getElementById("weekBtnLabel");
+    var total = (state._weekKeys||[]).length;
+    var sel = state.weekSel || [];
+    if(!sel.length){ lbl.textContent = "Todas las semanas ("+total+")"; return; }
+    if(sel.length === 1){ lbl.textContent = weekLabel(state._weekMap[sel[0]]); return; }
+    lbl.textContent = sel.length+" de "+total+" semanas";
+  }
+  function renderWeekPanel(){
+    var panel = document.getElementById("weekPanel");
+    var keys = state._weekKeys || [];
+    var sel = state.weekSel || [];
+    var allChecked = sel.length === 0;
+    var html = '<label><input type="checkbox" id="weekAll" '+(allChecked?"checked":"")+'> <b>Todas las semanas</b></label><div class="ms-sep"></div>';
+    html += keys.map(function(k){
+      var checked = allChecked || sel.indexOf(k)!==-1;
+      return '<label><input type="checkbox" class="weekChk" value="'+k+'" '+(checked?"checked":"")+'> '+weekLabel(state._weekMap[k])+'</label>';
+    }).join("");
+    panel.innerHTML = html;
+
+    document.getElementById("weekAll").addEventListener("change", function(){
+      state.weekSel = [];
+      renderWeekPanel(); updateWeekBtnLabel(); applyFiltersAndRender();
+    });
+    Array.prototype.forEach.call(panel.querySelectorAll(".weekChk"), function(chk){
+      chk.addEventListener("change", function(){
+        var chosen = Array.prototype.filter.call(panel.querySelectorAll(".weekChk"), function(c){ return c.checked; })
+                      .map(function(c){ return c.value; });
+        state.weekSel = (chosen.length === 0 || chosen.length === keys.length) ? [] : chosen;
+        renderWeekPanel(); updateWeekBtnLabel(); applyFiltersAndRender();
+      });
+    });
+  }
+
   function populateFilterOptions(){
-    var weekSel = document.getElementById("filterWeek");
     var promoSel = document.getElementById("filterPromotor");
+    var weekBtn = document.getElementById("weekBtn");
+    var weekPanel = document.getElementById("weekPanel");
     if(state.isSample || !state.windowed.length){
-      weekSel.innerHTML = '<option value="ALL">Todas las semanas</option>';
+      state._weekKeys = []; state._weekMap = {}; state.weekSel = [];
+      weekPanel.innerHTML = ""; weekPanel.hidden = true;
+      document.getElementById("weekBtnLabel").textContent = "Todas las semanas";
+      weekBtn.disabled = true;
       promoSel.innerHTML = '<option value="ALL">Todos los promotores</option>';
-      weekSel.disabled = true; promoSel.disabled = true;
+      promoSel.disabled = true;
       return;
     }
-    weekSel.disabled = false; promoSel.disabled = false;
+    weekBtn.disabled = false; promoSel.disabled = false;
 
     var weeks = {};
     state.windowed.forEach(function(r){ var k=weekKeyOf(r.fecha); if(!weeks[k]) weeks[k]=mondayOf(r.fecha); });
     var weekKeys = Object.keys(weeks).sort().reverse();
-    var currentWeek = weekSel.value || "ALL";
-    weekSel.innerHTML = '<option value="ALL">Todas las semanas ('+weekKeys.length+')</option>' +
-      weekKeys.map(function(k){
-        var start = weeks[k]; var end = new Date(start.getTime()+6*24*3600*1000);
-        return '<option value="'+k+'">'+fmtDate(start)+' – '+fmtDate(end)+'</option>';
-      }).join("");
-    weekSel.value = weekKeys.indexOf(currentWeek) !== -1 ? currentWeek : "ALL";
+    state._weekKeys = weekKeys; state._weekMap = weeks;
+    state.weekSel = (state.weekSel||[]).filter(function(k){ return weekKeys.indexOf(k)!==-1; });
+    renderWeekPanel(); updateWeekBtnLabel();
 
     var promoSet = {};
     state.windowed.forEach(function(r){ if(r.promotor) promoSet[r.promotor]=true; });
@@ -616,10 +678,10 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
       renderMotivo(sampleMotivo(), true);
       return;
     }
-    var wf = document.getElementById("filterWeek").value;
+    var weekSel = state.weekSel || [];
     var pf = document.getElementById("filterPromotor").value;
     var filtered = state.windowed.filter(function(r){
-      if(wf !== "ALL" && weekKeyOf(r.fecha) !== wf) return false;
+      if(weekSel.length && weekSel.indexOf(weekKeyOf(r.fecha)) === -1) return false;
       if(pf !== "ALL" && r.promotor !== pf) return false;
       return true;
     });
@@ -649,7 +711,6 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     var critTiendas = result.tiendas.filter(function(t){ return t.racha >= cfg.racha; });
 
     kpi.innerHTML = [
-      ["Periodo mostrado", fmtDate(result.windowStart)+" → "+fmtDate(result.maxDate), ""],
       ["Visitas programadas", result.totalProg.toLocaleString("es-PE"), ""],
       ["% Cobertura", pctCobGlobal.toFixed(1)+"%", result.totalCob.toLocaleString("es-PE")+" cubiertas"],
       ["% Efectividad", pctEfecGlobal.toFixed(1)+"%", result.totalEfec.toLocaleString("es-PE")+" efectivas"],
@@ -755,8 +816,21 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
       else { render(sampleResult(), true); renderMotivo(sampleMotivo(), true); }
     });
   });
-  document.getElementById("filterWeek").addEventListener("change", applyFiltersAndRender);
   document.getElementById("filterPromotor").addEventListener("change", applyFiltersAndRender);
+  (function(){
+    var weekBtnEl = document.getElementById("weekBtn");
+    var weekPanelEl = document.getElementById("weekPanel");
+    weekBtnEl.addEventListener("click", function(e){
+      e.stopPropagation();
+      if(weekBtnEl.disabled) return;
+      weekPanelEl.hidden = !weekPanelEl.hidden;
+    });
+    document.addEventListener("click", function(e){
+      if(!weekPanelEl.hidden && !weekPanelEl.contains(e.target) && !weekBtnEl.contains(e.target)){
+        weekPanelEl.hidden = true;
+      }
+    });
+  })();
   document.getElementById("searchPromo").addEventListener("input", function(){ if(lastResult) renderPromoTable(lastResult.promotores); });
   document.getElementById("searchTienda").addEventListener("input", function(){ if(lastResult) renderTiendaTable(lastResult.tiendas); });
   document.getElementById("searchMotivo").addEventListener("input", function(){ renderMotivo(lastMotivo, state.isSample); });
