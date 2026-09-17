@@ -228,11 +228,17 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     <p>Sube el archivo <span class="mono">VALIDACIÓN_2026.xlsx</span> (hojas <span class="mono">POS Q1</span> / <span class="mono">POS Q2</span>) y obtén al instante qué promotores no están visitando todas sus tiendas, qué tiendas llevan semanas sin cobertura, y el motivo de cada visita no efectiva.</p>
   </div>
   <div class="upload-panel">
+    <div class="upload-row" id="msRow" hidden>
+      <button class="file-btn" id="msConnectBtn" type="button">🔗 Conectar SharePoint (en vivo)</button>
+      <button class="file-btn" id="msRefreshBtn" type="button" hidden>↻ Actualizar</button>
+      <span class="file-name" id="msUser"></span>
+    </div>
     <div class="upload-row">
       <label class="file-btn" for="fileInput">Cargar archivo .xlsx</label>
       <input type="file" id="fileInput" accept=".xlsx,.xls" />
       <span class="file-name" id="fileName">Ningún archivo cargado</span>
     </div>
+    <div class="status-line" id="msNote" hidden>Conexión en vivo con SharePoint: pendiente de configurar (Client ID de Entra). Mientras tanto usa la carga manual.</div>
     <div class="status-line" id="statusLine">Esperando archivo…</div>
     <details class="settings">
       <summary>⚙ Ajustes del análisis</summary>
@@ -357,6 +363,19 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   </details>
 </footer>
 
+<!-- Microsoft Authentication Library (para leer el Excel en vivo desde SharePoint) -->
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
+<script>
+/* ═══════ CONFIG conexión en vivo con SharePoint (Microsoft Graph) ═══════
+   Pega aquí el Client ID de la app registrada en Entra (Azure AD).
+   Mientras clientId esté vacío, el radar solo usa la carga manual. */
+window.RADAR_MS = {
+  clientId: "",                                   // ← PEGAR Client ID de la app de Entra
+  tenant:   "ttauditperu.onmicrosoft.com",        // tenant de la organización
+  scopes:   ["Files.Read.All"],
+  shareUrl: "https://ttauditperu-my.sharepoint.com/:x:/g/personal/drueda_ttauditperu_onmicrosoft_com/IQD6lr_1xH9dTbYB8A_BS5itAb9S0bpZzd5ISNyQzT1wPDA?e=nUkEHC"
+};
+</script>
 <script>
 (function(){
   "use strict";
@@ -835,6 +854,92 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   document.getElementById("searchTienda").addEventListener("input", function(){ if(lastResult) renderTiendaTable(lastResult.tiendas); });
   document.getElementById("searchMotivo").addEventListener("input", function(){ renderMotivo(lastMotivo, state.isSample); });
 
+  // ═══════ Conexión en vivo con SharePoint (Microsoft Graph + MSAL) ═══════
+  var MS = window.RADAR_MS || {};
+  var msalApp = null;
+
+  function b64url(str){
+    return btoa(unescape(encodeURIComponent(str))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_");
+  }
+  function graphShareId(url){ return "u!" + b64url(url); }
+
+  function msToken(interactive){
+    var req = { scopes: MS.scopes || ["Files.Read.All"] };
+    var acc = msalApp.getAllAccounts()[0];
+    if(acc){
+      req.account = acc;
+      return msalApp.acquireTokenSilent(req).then(function(r){ return r.accessToken; })
+        .catch(function(){
+          if(!interactive) return Promise.reject(new Error("silent-failed"));
+          return msalApp.acquireTokenPopup(req).then(function(r){ return r.accessToken; });
+        });
+    }
+    if(!interactive) return Promise.reject(new Error("no-account"));
+    return msalApp.loginPopup(req).then(function(r){
+      if(r.account) document.getElementById("msUser").textContent = r.account.username;
+      return r.accessToken;
+    });
+  }
+
+  function loadFromSharePoint(silent){
+    var status = document.getElementById("statusLine");
+    if(!MS.shareUrl){ status.textContent = "⚠ Falta la URL del archivo de SharePoint en la config."; status.className = "status-line err"; return; }
+    if(!silent){ status.textContent = "Conectando con SharePoint…"; status.className = "status-line"; }
+    msToken(!silent).then(function(token){
+      var url = "https://graph.microsoft.com/v1.0/shares/" + graphShareId(MS.shareUrl) + "/driveItem/content";
+      return fetch(url, { headers: { Authorization: "Bearer " + token } });
+    }).then(function(res){
+      if(!res.ok) throw new Error("Graph HTTP " + res.status);
+      return res.arrayBuffer();
+    }).then(function(buf){
+      var wb = XLSX.read(buf, { type:"array", cellDates:true });
+      var parsed = parseWorkbook(wb);
+      if(parsed.error) throw new Error(parsed.error);
+      document.getElementById("fileName").textContent = "SharePoint · en vivo";
+      onFileLoaded(parsed.records);
+      var mr = document.getElementById("msRefreshBtn"); if(mr) mr.hidden = false;
+      if(state.maxDate){
+        status.textContent = "✓ " + parsed.records.length.toLocaleString("es-PE") + " visitas desde SharePoint · última fecha " + fmtDate(state.maxDate);
+        status.className = "status-line ok";
+      }
+    }).catch(function(err){
+      if(silent && (err.message === "no-account" || err.message === "silent-failed")){ return; }
+      status.textContent = "⚠ No se pudo cargar desde SharePoint: " + err.message;
+      status.className = "status-line err";
+    });
+  }
+
+  function initMs(){
+    var row = document.getElementById("msRow");
+    var note = document.getElementById("msNote");
+    if(!MS.clientId || typeof msal === "undefined"){
+      if(row) row.hidden = true;
+      if(note) note.hidden = true;   // sin Client ID: se ve igual que antes (solo carga manual)
+      return;
+    }
+    if(note) note.hidden = true;
+    if(row) row.hidden = false;
+    msalApp = new msal.PublicClientApplication({
+      auth: {
+        clientId: MS.clientId,
+        authority: "https://login.microsoftonline.com/" + (MS.tenant || "organizations"),
+        redirectUri: location.origin + location.pathname
+      },
+      cache: { cacheLocation: "localStorage" }
+    });
+    msalApp.initialize().then(function(){
+      var acc = msalApp.getAllAccounts()[0];
+      if(acc){
+        document.getElementById("msUser").textContent = acc.username;
+        loadFromSharePoint(true);   // refresco silencioso si ya hay sesión
+      }
+    });
+    var cb = document.getElementById("msConnectBtn");
+    if(cb) cb.addEventListener("click", function(){ loadFromSharePoint(false); });
+    var rb = document.getElementById("msRefreshBtn");
+    if(rb) rb.addEventListener("click", function(){ loadFromSharePoint(false); });
+  }
+
   document.getElementById("fileInput").addEventListener("change", function(e){
     var file = e.target.files && e.target.files[0];
     if(!file) return;
@@ -868,6 +973,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   populateFilterOptions();
   render(sampleResult(), true);
   renderMotivo(sampleMotivo(), true);
+  initMs();
 
   // ---------- auto-ajuste de altura dentro del iframe de BAT 360 ----------
   function reportHeight(){
