@@ -857,6 +857,7 @@ window.RADAR_MS = {
   // ═══════ Conexión en vivo con SharePoint (Microsoft Graph + MSAL) ═══════
   var MS = window.RADAR_MS || {};
   var msalApp = null;
+  var msInFlight = false;
 
   function b64url(str){
     return btoa(unescape(encodeURIComponent(str))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_");
@@ -884,6 +885,8 @@ window.RADAR_MS = {
   function loadFromSharePoint(silent){
     var status = document.getElementById("statusLine");
     if(!MS.shareUrl){ status.textContent = "⚠ Falta la URL del archivo de SharePoint en la config."; status.className = "status-line err"; return; }
+    if(msInFlight){ return; }               // evita interaction_in_progress por doble clic
+    msInFlight = true;
     if(!silent){ status.textContent = "Conectando con SharePoint…"; status.className = "status-line"; }
     msToken(!silent).then(function(token){
       var url = "https://graph.microsoft.com/v1.0/shares/" + graphShareId(MS.shareUrl) + "/driveItem/content";
@@ -903,10 +906,17 @@ window.RADAR_MS = {
         status.className = "status-line ok";
       }
     }).catch(function(err){
-      if(silent && (err.message === "no-account" || err.message === "silent-failed")){ return; }
-      status.textContent = "⚠ No se pudo cargar desde SharePoint: " + err.message;
+      var msg = (err && err.message) || String(err);
+      if(silent && (msg === "no-account" || msg === "silent-failed")){ return; }
+      if(msg.indexOf("interaction_in_progress") !== -1){
+        status.textContent = "⚠ Login en curso o interrumpido. Recarga la página (F5) e intenta de nuevo, completando el inicio de sesión sin cerrar la ventana.";
+      } else if(msg.indexOf("popup_window_error") !== -1 || msg.indexOf("BrowserAuthError: popup") !== -1){
+        status.textContent = "⚠ El navegador bloqueó la ventana de inicio de sesión. Permite ventanas emergentes para bat360.vercel.app e intenta otra vez.";
+      } else {
+        status.textContent = "⚠ No se pudo cargar desde SharePoint: " + msg;
+      }
       status.className = "status-line err";
-    });
+    }).finally(function(){ msInFlight = false; });
   }
 
   function initMs(){
@@ -927,13 +937,18 @@ window.RADAR_MS = {
       },
       cache: { cacheLocation: "localStorage" }
     });
-    msalApp.initialize().then(function(){
-      var acc = msalApp.getAllAccounts()[0];
-      if(acc){
-        document.getElementById("msUser").textContent = acc.username;
-        loadFromSharePoint(true);   // refresco silencioso si ya hay sesión
-      }
-    });
+    msalApp.initialize()
+      .then(function(){ return msalApp.handleRedirectPromise(); })  // limpia estado de interacción previo
+      .then(function(resp){
+        if(resp && resp.account) msalApp.setActiveAccount(resp.account);
+        var acc = msalApp.getActiveAccount() || msalApp.getAllAccounts()[0];
+        if(acc){
+          msalApp.setActiveAccount(acc);
+          document.getElementById("msUser").textContent = acc.username;
+          loadFromSharePoint(true);   // refresco silencioso si ya hay sesión
+        }
+      })
+      .catch(function(e){ console.warn("MSAL init:", e && e.message); });
     var cb = document.getElementById("msConnectBtn");
     if(cb) cb.addEventListener("click", function(){ loadFromSharePoint(false); });
     var rb = document.getElementById("msRefreshBtn");
