@@ -277,7 +277,18 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     <label for="filterPromotor">Promotor</label>
     <select id="filterPromotor" disabled><option value="ALL">Todos los promotores</option></select>
   </div>
-  <span class="filter-hint" id="filterHint">Estos filtros aplican a los KPIs, las alertas y las 3 tablas de abajo.</span>
+  <div class="filter-field">
+    <label for="filterEfec">% Efectividad</label>
+    <select id="filterEfec" disabled>
+      <option value="ALL">Toda la efectividad</option>
+      <option value="lt70">Menor a 70%</option>
+      <option value="lt80">Menor a 80%</option>
+      <option value="lt90">Menor a 90%</option>
+      <option value="lt95">Menor a 95%</option>
+      <option value="eq100">100%</option>
+    </select>
+  </div>
+  <span class="filter-hint" id="filterHint">Semanas y promotor aplican a todo; % efectividad filtra el resumen y la tabla de promotores.</span>
 </div>
 
 <div class="kpi-strip" id="kpiStrip"></div>
@@ -298,6 +309,25 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 </section>
 
 <section class="tables">
+  <div class="table-block">
+    <div class="table-head">
+      <h2>Resumen por promotor <span class="count-pill chip" id="resumenCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
+      <input class="search-box" id="searchResumen" placeholder="Buscar promotor…" />
+      <span class="desc">Cobertura y efectividad de cada promotor en el periodo/semana(s) seleccionado. Cantidad de tiendas y % por indicador.</span>
+    </div>
+    <div class="table-scroll">
+      <table id="tableResumen">
+        <thead><tr>
+          <th>Promotor</th><th class="num">Tiendas</th><th class="num">Programadas</th>
+          <th class="num">Cobertura N°</th><th class="num">% Cobertura</th>
+          <th class="num">Efectivas N°</th><th class="num">% Efectividad</th>
+          <th class="num">No efectivas N°</th><th class="num">% No efectiv.</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="table-block">
     <div class="table-head">
       <h2>Promotores</h2>
@@ -323,7 +353,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     <div class="table-scroll">
       <table id="tableTienda">
         <thead><tr>
-          <th>Tienda</th><th>Cadena</th><th>Ciudad</th><th>Promotor</th><th>Frecuencia</th>
+          <th>Tienda</th><th>Cadena</th><th>Distrito</th><th>Ciudad</th><th>Promotor</th><th>Día visita</th><th>Frecuencia</th>
           <th class="num">% Cobertura</th><th class="num">Racha perdida</th><th>Última visita cubierta</th>
           <th class="num">Semanas sin cobertura</th>
         </tr></thead>
@@ -341,7 +371,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     <div class="table-scroll">
       <table id="tableMotivo">
         <thead><tr>
-          <th>Fecha</th><th>Promotor</th><th>Cadena</th><th>Tienda</th><th>Ciudad</th><th>Motivo</th>
+          <th>Fecha</th><th>Día visita</th><th>Promotor</th><th>Cadena</th><th>Tienda</th><th>Distrito</th><th>Ciudad</th><th>Motivo</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -406,6 +436,7 @@ window.RADAR_MS = {
     cod: "CODIGO TT AUDIT",
     cadena: "CADENA",
     estacion: "ESTACION",
+    distrito: "DITRITO|DISTRITO",
     provincia: "PROVINCIA",
     promotor: "PROMOTOR",
     diaRuteado: "DIA RUTEADO DE VISITA",
@@ -420,10 +451,11 @@ window.RADAR_MS = {
     var normed = headerRow.map(norm);
     var map = {};
     Object.keys(COL_TARGETS).forEach(function(key){
-      var target = COL_TARGETS[key];
-      var idx = normed.indexOf(target);
+      var targets = COL_TARGETS[key].split("|");   // admite variantes de nombre (p.ej. DITRITO|DISTRITO)
+      var idx = -1;
+      for(var t=0; t<targets.length && idx === -1; t++){ idx = normed.indexOf(targets[t]); }
       if(idx === -1){
-        var words = target.split(" ");
+        var words = targets[0].split(" ");
         idx = normed.findIndex(function(h){ return words.every(function(w){ return h.indexOf(w) !== -1; }); });
       }
       map[key] = idx;
@@ -476,6 +508,7 @@ window.RADAR_MS = {
           cod: String(cod),
           cadena: String(cadena),
           estacion: map.estacion !== -1 ? String(r[map.estacion] || "") : "",
+          distrito: map.distrito !== -1 ? String(r[map.distrito] || "") : "",
           provincia: map.provincia !== -1 ? String(r[map.provincia] || "") : "",
           promotor: promotor,
           diaRuteado: map.diaRuteado !== -1 ? String(r[map.diaRuteado] || "") : "",
@@ -515,7 +548,7 @@ window.RADAR_MS = {
       var weeksSince = lastCov ? (maxDate - lastCov)/(7*24*3600*1000) : null;
       var last = g[n-1];
       return {
-        cod: last.cod, estacion: last.estacion, cadena: last.cadena, provincia: last.provincia,
+        cod: last.cod, estacion: last.estacion, cadena: last.cadena, distrito: last.distrito, provincia: last.provincia,
         promotor: last.promotor, frecuencia: last.frecuencia, dia: last.diaRuteado,
         nProg: n, nCob: nCob, pctCob: n ? nCob/n*100 : 0, racha: racha,
         lastCov: lastCov, weeksSince: weeksSince
@@ -562,10 +595,10 @@ window.RADAR_MS = {
       {promotor:"EJEMPLO — R. DÍAZ", provincia:"CUSCO", nStores:15, nProg:90, nCob:90, pctCob:100.0, nEfec:86, pctEfec:95.6, withFailure:0, neverCovered:0}
     ];
     var tiendas = [
-      {cod:"000001", estacion:"EJEMPLO — TIENDA NORTE", cadena:"TAMBO", provincia:"LIMA", promotor:"EJEMPLO — A. TORRES", frecuencia:"SEMANAL", dia:"LUNES", pctCob:0, racha:7, lastCov:null, weeksSince:null},
-      {cod:"000002", estacion:"EJEMPLO — TIENDA SUR", cadena:"OXXO", provincia:"LIMA", promotor:"EJEMPLO — A. TORRES", frecuencia:"QUINCENAL 1", dia:"MARTES", pctCob:20, racha:3, lastCov:d(38), weeksSince:5.4},
-      {cod:"000003", estacion:"EJEMPLO — GRIFO CENTRO", cadena:"REPSOL", provincia:"AREQUIPA", promotor:"EJEMPLO — C. RAMOS", frecuencia:"SEMANAL", dia:"MIÉRCOLES", pctCob:55, racha:2, lastCov:d(15), weeksSince:2.1},
-      {cod:"000004", estacion:"EJEMPLO — MERCADO ESTE", cadena:"PRIMAX", provincia:"CHICLAYO", promotor:"EJEMPLO — M. FLORES", frecuencia:"MENSUAL", dia:"VIERNES", pctCob:100, racha:0, lastCov:d(4), weeksSince:0.6}
+      {cod:"000001", estacion:"EJEMPLO — TIENDA NORTE", cadena:"TAMBO", distrito:"LOS OLIVOS", provincia:"LIMA", promotor:"EJEMPLO — A. TORRES", frecuencia:"SEMANAL", dia:"LUNES", pctCob:0, racha:7, lastCov:null, weeksSince:null},
+      {cod:"000002", estacion:"EJEMPLO — TIENDA SUR", cadena:"OXXO", distrito:"CHORRILLOS", provincia:"LIMA", promotor:"EJEMPLO — A. TORRES", frecuencia:"QUINCENAL 1", dia:"MARTES", pctCob:20, racha:3, lastCov:d(38), weeksSince:5.4},
+      {cod:"000003", estacion:"EJEMPLO — GRIFO CENTRO", cadena:"REPSOL", distrito:"CERRO COLORADO", provincia:"AREQUIPA", promotor:"EJEMPLO — C. RAMOS", frecuencia:"SEMANAL", dia:"MIÉRCOLES", pctCob:55, racha:2, lastCov:d(15), weeksSince:2.1},
+      {cod:"000004", estacion:"EJEMPLO — MERCADO ESTE", cadena:"PRIMAX", distrito:"LA VICTORIA", provincia:"CHICLAYO", promotor:"EJEMPLO — M. FLORES", frecuencia:"MENSUAL", dia:"VIERNES", pctCob:100, racha:0, lastCov:d(4), weeksSince:0.6}
     ];
     return {maxDate:max, windowStart:d(56), totalProg:630, totalCob:426, totalEfec:385, tiendas:tiendas, promotores:promotores};
   }
@@ -573,9 +606,9 @@ window.RADAR_MS = {
     var max = new Date(2026,8,12);
     function d(off){ return new Date(max.getTime()-off*24*3600*1000); }
     return [
-      {fecha:d(2), promotor:"EJEMPLO — C. RAMOS", cadena:"REPSOL", estacion:"EJEMPLO — GRIFO CENTRO", provincia:"AREQUIPA", comentario:"Administrador no permitió tomar fotos por política de tienda."},
-      {fecha:d(6), promotor:"EJEMPLO — A. TORRES", cadena:"TAMBO", estacion:"EJEMPLO — TIENDA NORTE", provincia:"LIMA", comentario:"Local en remodelación, sin acceso a counter."},
-      {fecha:d(9), promotor:"EJEMPLO — M. FLORES", cadena:"PRIMAX", estacion:"EJEMPLO — MERCADO ESTE", provincia:"CHICLAYO", comentario:"Personal de tienda ocupado con auditoría interna."}
+      {fecha:d(2), dia:"MIÉRCOLES", promotor:"EJEMPLO — C. RAMOS", cadena:"REPSOL", estacion:"EJEMPLO — GRIFO CENTRO", distrito:"CERRO COLORADO", provincia:"AREQUIPA", comentario:"Administrador no permitió tomar fotos por política de tienda."},
+      {fecha:d(6), dia:"LUNES", promotor:"EJEMPLO — A. TORRES", cadena:"TAMBO", estacion:"EJEMPLO — TIENDA NORTE", distrito:"LOS OLIVOS", provincia:"LIMA", comentario:"Local en remodelación, sin acceso a counter."},
+      {fecha:d(9), dia:"VIERNES", promotor:"EJEMPLO — M. FLORES", cadena:"PRIMAX", estacion:"EJEMPLO — MERCADO ESTE", distrito:"LA VICTORIA", provincia:"CHICLAYO", comentario:"Personal de tienda ocupado con auditoría interna."}
     ];
   }
 
@@ -632,7 +665,7 @@ window.RADAR_MS = {
     var allChecked = sel.length === 0;
     var html = '<label><input type="checkbox" id="weekAll" '+(allChecked?"checked":"")+'> <b>Todas las semanas</b></label><div class="ms-sep"></div>';
     html += keys.map(function(k){
-      var checked = allChecked || sel.indexOf(k)!==-1;
+      var checked = !allChecked && sel.indexOf(k)!==-1;   // con "Todas" activo, las semanas van desmarcadas
       return '<label><input type="checkbox" class="weekChk" value="'+k+'" '+(checked?"checked":"")+'> '+weekLabel(state._weekMap[k])+'</label>';
     }).join("");
     panel.innerHTML = html;
@@ -662,9 +695,11 @@ window.RADAR_MS = {
       weekBtn.disabled = true;
       promoSel.innerHTML = '<option value="ALL">Todos los promotores</option>';
       promoSel.disabled = true;
+      var efSel0 = document.getElementById("filterEfec"); if(efSel0){ efSel0.value = "ALL"; efSel0.disabled = true; }
       return;
     }
     weekBtn.disabled = false; promoSel.disabled = false;
+    var efSel = document.getElementById("filterEfec"); if(efSel) efSel.disabled = false;
 
     var weeks = {};
     state.windowed.forEach(function(r){ var k=weekKeyOf(r.fecha); if(!weeks[k]) weeks[k]=mondayOf(r.fecha); });
@@ -715,7 +750,7 @@ window.RADAR_MS = {
     render(result, false);
     var motivo = filtered.filter(function(r){ return r.cobertura && !r.efectividad; })
       .sort(function(a,b){ return b.fecha - a.fecha; })
-      .map(function(r){ return {fecha:r.fecha, promotor:r.promotor, cadena:r.cadena, estacion:r.estacion, provincia:r.provincia, comentario:r.comentario}; });
+      .map(function(r){ return {fecha:r.fecha, dia:r.diaRuteado, promotor:r.promotor, cadena:r.cadena, estacion:r.estacion, distrito:r.distrito, provincia:r.provincia, comentario:r.comentario}; });
     renderMotivo(motivo, false);
   }
 
@@ -754,13 +789,53 @@ window.RADAR_MS = {
       return '<li class="alert-item"><div class="who"><span class="name">'+esc(t.estacion)+'</span><span class="meta">'+esc(t.promotor)+' · '+esc(t.cadena)+'</span></div><span class="stat chip crit">'+t.racha+' seguidas</span></li>';
     }).join("") : '<div class="empty-note">Sin tiendas en alerta con los umbrales y filtros actuales. 🎉</div>';
 
+    renderSummary(result.promotores);
     renderPromoTable(result.promotores);
     renderTiendaTable(result.tiendas);
+  }
+
+  function efecFilterVal(){ var e = document.getElementById("filterEfec"); return e ? e.value : "ALL"; }
+  function efecPass(pctEfec){
+    var v = efecFilterVal();
+    if(v === "ALL") return true;
+    if(pctEfec === null || pctEfec === undefined || isNaN(pctEfec)) return false; // sin efectividad: excluir al filtrar
+    if(v === "lt70") return pctEfec < 70;
+    if(v === "lt80") return pctEfec < 80;
+    if(v === "lt90") return pctEfec < 90;
+    if(v === "lt95") return pctEfec < 95;
+    if(v === "eq100") return pctEfec >= 100;
+    return true;
+  }
+
+  function renderSummary(promotores){
+    var q = norm(document.getElementById("searchResumen").value);
+    var rows = promotores.slice()
+      .filter(function(p){ return efecPass(p.pctEfec); })
+      .filter(function(p){ return !q || norm(p.promotor).indexOf(q)!==-1; })
+      .sort(function(a,b){ return (a.pctEfec==null?-1:a.pctEfec) - (b.pctEfec==null?-1:b.pctEfec); });
+    document.getElementById("resumenCount").textContent = rows.length;
+    var tbody = document.querySelector("#tableResumen tbody");
+    tbody.innerHTML = rows.map(function(p){
+      var noEfec = p.nCob - p.nEfec;
+      var pctNoEfec = p.nCob ? (noEfec/p.nCob*100) : null;
+      return '<tr>'+
+        '<td class="nowrap">'+esc(p.promotor)+'</td>'+
+        '<td class="num">'+p.nStores+'</td>'+
+        '<td class="num">'+p.nProg+'</td>'+
+        '<td class="num">'+p.nCob+'</td>'+
+        '<td class="num"><span class="chip '+pctChipClass(p.pctCob)+'">'+p.pctCob.toFixed(1)+'%</span></td>'+
+        '<td class="num">'+p.nEfec+'</td>'+
+        '<td class="num">'+(p.pctEfec===null?"—":'<span class="chip '+pctChipClass(p.pctEfec)+'">'+p.pctEfec.toFixed(1)+'%</span>')+'</td>'+
+        '<td class="num">'+(p.nCob? noEfec : 0)+'</td>'+
+        '<td class="num">'+(pctNoEfec===null?"—":pctNoEfec.toFixed(1)+"%")+'</td>'+
+      '</tr>';
+    }).join("") || '<tr><td colspan="9" style="color:var(--text-muted)">Sin resultados.</td></tr>';
   }
 
   function renderPromoTable(promotores){
     var q = norm(document.getElementById("searchPromo").value);
     var rows = promotores.slice().sort(function(a,b){ return a.pctCob - b.pctCob; })
+      .filter(function(p){ return efecPass(p.pctEfec); })
       .filter(function(p){ return !q || norm(p.promotor).indexOf(q)!==-1 || norm(p.provincia).indexOf(q)!==-1; });
     var tbody = document.querySelector("#tablePromo tbody");
     tbody.innerHTML = rows.map(function(p){
@@ -782,22 +857,24 @@ window.RADAR_MS = {
   function renderTiendaTable(tiendas){
     var q = norm(document.getElementById("searchTienda").value);
     var rows = tiendas.slice().sort(function(a,b){ return b.racha - a.racha || (b.weeksSince||0)-(a.weeksSince||0); })
-      .filter(function(t){ return !q || norm(t.estacion).indexOf(q)!==-1 || norm(t.promotor).indexOf(q)!==-1 || norm(t.cadena).indexOf(q)!==-1; });
+      .filter(function(t){ return !q || norm(t.estacion).indexOf(q)!==-1 || norm(t.promotor).indexOf(q)!==-1 || norm(t.cadena).indexOf(q)!==-1 || norm(t.distrito).indexOf(q)!==-1 || norm(t.provincia).indexOf(q)!==-1; });
     var tbody = document.querySelector("#tableTienda tbody");
     tbody.innerHTML = rows.map(function(t){
       var cls = t.racha >= cfg.racha ? "row-crit" : (t.pctCob < cfg.green ? "row-warn" : "");
       return '<tr class="'+cls+'">'+
         '<td class="nowrap">'+esc(t.estacion)+'</td>'+
         '<td class="nowrap">'+esc(t.cadena)+'</td>'+
+        '<td class="nowrap">'+(esc(t.distrito)||"—")+'</td>'+
         '<td class="nowrap">'+esc(t.provincia)+'</td>'+
         '<td class="nowrap">'+esc(t.promotor)+'</td>'+
+        '<td class="nowrap">'+(esc(t.dia)||"—")+'</td>'+
         '<td class="nowrap">'+esc(t.frecuencia)+'</td>'+
         '<td class="num"><span class="chip '+pctChipClass(t.pctCob)+'">'+t.pctCob.toFixed(1)+'%</span></td>'+
         '<td class="num">'+(t.racha>0? '<span class="chip crit">'+t.racha+'</span>' : '0')+'</td>'+
         '<td class="nowrap">'+(t.lastCov ? fmtDate(t.lastCov) : "Nunca en el periodo")+'</td>'+
         '<td class="num">'+(t.weeksSince===null||t.weeksSince===undefined?"—":t.weeksSince.toFixed(1))+'</td>'+
       '</tr>';
-    }).join("") || '<tr><td colspan="9" style="color:var(--text-muted)">Sin resultados.</td></tr>';
+    }).join("") || '<tr><td colspan="11" style="color:var(--text-muted)">Sin resultados.</td></tr>';
   }
 
   function renderMotivo(rows, sample){
@@ -805,19 +882,21 @@ window.RADAR_MS = {
     document.getElementById("motivoCount").textContent = rows.length;
     var q = norm(document.getElementById("searchMotivo").value);
     var filtered = rows.filter(function(r){
-      return !q || norm(r.estacion).indexOf(q)!==-1 || norm(r.promotor).indexOf(q)!==-1 || norm(r.comentario).indexOf(q)!==-1;
+      return !q || norm(r.estacion).indexOf(q)!==-1 || norm(r.promotor).indexOf(q)!==-1 || norm(r.comentario).indexOf(q)!==-1 || norm(r.distrito).indexOf(q)!==-1;
     });
     var tbody = document.querySelector("#tableMotivo tbody");
     tbody.innerHTML = filtered.length ? filtered.map(function(r){
       return '<tr>'+
         '<td class="nowrap">'+fmtDate(r.fecha)+'</td>'+
+        '<td class="nowrap">'+(esc(r.dia)||"—")+'</td>'+
         '<td class="nowrap">'+esc(r.promotor)+'</td>'+
         '<td class="nowrap">'+esc(r.cadena)+'</td>'+
         '<td class="nowrap">'+esc(r.estacion)+'</td>'+
+        '<td class="nowrap">'+(esc(r.distrito)||"—")+'</td>'+
         '<td class="nowrap">'+esc(r.provincia)+'</td>'+
         '<td class="motivo-cell">'+esc(r.comentario || "Sin comentario registrado")+'</td>'+
       '</tr>';
-    }).join("") : '<tr><td colspan="6" style="color:var(--text-muted)">Sin visitas no efectivas para este filtro. 🎉</td></tr>';
+    }).join("") : '<tr><td colspan="8" style="color:var(--text-muted)">Sin visitas no efectivas para este filtro. 🎉</td></tr>';
   }
 
   function onFileLoaded(records){
@@ -836,6 +915,9 @@ window.RADAR_MS = {
     });
   });
   document.getElementById("filterPromotor").addEventListener("change", applyFiltersAndRender);
+  document.getElementById("filterEfec").addEventListener("change", function(){
+    if(lastResult){ renderSummary(lastResult.promotores); renderPromoTable(lastResult.promotores); }
+  });
   (function(){
     var weekBtnEl = document.getElementById("weekBtn");
     var weekPanelEl = document.getElementById("weekPanel");
@@ -850,6 +932,7 @@ window.RADAR_MS = {
       }
     });
   })();
+  document.getElementById("searchResumen").addEventListener("input", function(){ if(lastResult) renderSummary(lastResult.promotores); });
   document.getElementById("searchPromo").addEventListener("input", function(){ if(lastResult) renderPromoTable(lastResult.promotores); });
   document.getElementById("searchTienda").addEventListener("input", function(){ if(lastResult) renderTiendaTable(lastResult.tiendas); });
   document.getElementById("searchMotivo").addEventListener("input", function(){ renderMotivo(lastMotivo, state.isSample); });
