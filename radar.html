@@ -204,6 +204,9 @@ thead th{
   font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); white-space:nowrap;
   border-bottom:1px solid var(--border);
 }
+thead th[data-key]{cursor:pointer; user-select:none;}
+thead th[data-key]:hover{background:var(--accent-soft); color:var(--accent);}
+thead th .arr{opacity:.9; font-size:10px; margin-left:3px;}
 tbody td{padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top;}
 tbody td.nowrap{white-space:nowrap;}
 tbody tr:last-child td{border-bottom:none;}
@@ -288,7 +291,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
       <option value="eq100">100%</option>
     </select>
   </div>
-  <span class="filter-hint" id="filterHint">Semanas y promotor aplican a todo; % efectividad filtra el resumen y la tabla de promotores.</span>
+  <span class="filter-hint" id="filterHint">Semanas y promotor aplican a todo; % efectividad filtra la tabla de promotores.</span>
 </div>
 
 <div class="kpi-strip" id="kpiStrip"></div>
@@ -311,34 +314,24 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 <section class="tables">
   <div class="table-block">
     <div class="table-head">
-      <h2>Resumen por promotor <span class="count-pill chip" id="resumenCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
-      <input class="search-box" id="searchResumen" placeholder="Buscar promotor…" />
-      <span class="desc">Cobertura y efectividad de cada promotor en el periodo/semana(s) seleccionado. Cantidad de tiendas y % por indicador.</span>
-    </div>
-    <div class="table-scroll">
-      <table id="tableResumen">
-        <thead><tr>
-          <th>Promotor</th><th class="num">Tiendas</th><th class="num">Programadas</th>
-          <th class="num">Cobertura N°</th><th class="num">% Cobertura</th>
-          <th class="num">Efectivas N°</th><th class="num">% Efectividad</th>
-          <th class="num">No efectivas N°</th><th class="num">% No efectiv.</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="table-block">
-    <div class="table-head">
-      <h2>Promotores</h2>
+      <h2>Promotores · cobertura y efectividad <span class="count-pill chip" id="promoCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
       <input class="search-box" id="searchPromo" placeholder="Buscar promotor o ciudad…" />
+      <span class="desc">Un resumen por promotor en el periodo/semana(s) seleccionado. Clic en cualquier encabezado para ordenar.</span>
     </div>
     <div class="table-scroll">
       <table id="tablePromo">
         <thead><tr>
-          <th>Promotor</th><th>Ciudad</th><th class="num">Tiendas</th><th class="num">Programadas</th>
-          <th class="num">Cubiertas</th><th class="num">% Cobertura</th><th class="num">Efectivas</th>
-          <th class="num">% Efectividad</th><th class="num">Nunca cubiertas</th>
+          <th data-key="promotor" data-type="text">Promotor</th>
+          <th data-key="provincia" data-type="text">Ciudad</th>
+          <th class="num" data-key="nStores" data-type="num">Tiendas</th>
+          <th class="num" data-key="nProg" data-type="num">Programadas</th>
+          <th class="num" data-key="nCob" data-type="num">Cobertura N°</th>
+          <th class="num" data-key="pctCob" data-type="num">% Cobertura</th>
+          <th class="num" data-key="nEfec" data-type="num">Efectivas N°</th>
+          <th class="num" data-key="pctEfec" data-type="num">% Efectividad</th>
+          <th class="num" data-key="noEfec" data-type="num">No efectivas N°</th>
+          <th class="num" data-key="pctNoEfec" data-type="num">% No efectiv.</th>
+          <th class="num" data-key="neverCovered" data-type="num">Nunca cubiertas</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -349,13 +342,22 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     <div class="table-head">
       <h2>Tiendas</h2>
       <input class="search-box" id="searchTienda" placeholder="Buscar tienda, promotor o cadena…" />
+      <span class="desc">Clic en cualquier encabezado para ordenar.</span>
     </div>
     <div class="table-scroll">
       <table id="tableTienda">
         <thead><tr>
-          <th>Tienda</th><th>Cadena</th><th>Distrito</th><th>Ciudad</th><th>Promotor</th><th>Día visita</th><th>Frecuencia</th>
-          <th class="num">% Cobertura</th><th class="num">Racha perdida</th><th>Última visita cubierta</th>
-          <th class="num">Semanas sin cobertura</th>
+          <th data-key="estacion" data-type="text">Tienda</th>
+          <th data-key="cadena" data-type="text">Cadena</th>
+          <th data-key="distrito" data-type="text">Distrito</th>
+          <th data-key="provincia" data-type="text">Ciudad</th>
+          <th data-key="promotor" data-type="text">Promotor</th>
+          <th data-key="dia" data-type="text">Día visita</th>
+          <th data-key="frecuencia" data-type="text">Frecuencia</th>
+          <th class="num" data-key="pctCob" data-type="num">% Cobertura</th>
+          <th class="num" data-key="racha" data-type="num">Racha perdida</th>
+          <th data-key="lastCov" data-type="date">Última visita cubierta</th>
+          <th class="num" data-key="weeksSince" data-type="num">Semanas sin cobertura</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -366,12 +368,19 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     <div class="table-head">
       <h2>Motivo de no efectividad <span class="count-pill chip warn" id="motivoCount">0</span></h2>
       <input class="search-box" id="searchMotivo" placeholder="Buscar tienda, promotor o motivo…" />
-      <span class="desc">Visitas donde SÍ se cubrió la tienda pero la visita no fue efectiva, con el comentario registrado por el promotor.</span>
+      <span class="desc">Visitas donde SÍ se cubrió la tienda pero la visita no fue efectiva, con el comentario registrado por el promotor. Clic en un encabezado para ordenar.</span>
     </div>
     <div class="table-scroll">
       <table id="tableMotivo">
         <thead><tr>
-          <th>Fecha</th><th>Día visita</th><th>Promotor</th><th>Cadena</th><th>Tienda</th><th>Distrito</th><th>Ciudad</th><th>Motivo</th>
+          <th data-key="fecha" data-type="date">Fecha</th>
+          <th data-key="dia" data-type="text">Día visita</th>
+          <th data-key="promotor" data-type="text">Promotor</th>
+          <th data-key="cadena" data-type="text">Cadena</th>
+          <th data-key="estacion" data-type="text">Tienda</th>
+          <th data-key="distrito" data-type="text">Distrito</th>
+          <th data-key="provincia" data-type="text">Ciudad</th>
+          <th data-key="comentario" data-type="text">Motivo</th>
         </tr></thead>
         <tbody></tbody>
       </table>
@@ -789,9 +798,52 @@ window.RADAR_MS = {
       return '<li class="alert-item"><div class="who"><span class="name">'+esc(t.estacion)+'</span><span class="meta">'+esc(t.promotor)+' · '+esc(t.cadena)+'</span></div><span class="stat chip crit">'+t.racha+' seguidas</span></li>';
     }).join("") : '<div class="empty-note">Sin tiendas en alerta con los umbrales y filtros actuales. 🎉</div>';
 
-    renderSummary(result.promotores);
-    renderPromoTable(result.promotores);
+    renderPromotores(result.promotores);
     renderTiendaTable(result.tiendas);
+  }
+
+  // ---------- ordenamiento de columnas (todas las tablas) ----------
+  var sortState = {};
+  function applySort(rows, tableId){
+    var s = sortState[tableId];
+    if(!s || !s.key) return rows;
+    var key = s.key, type = s.type, dir = s.dir;
+    return rows.slice().sort(function(a,b){
+      var va = a[key], vb = b[key];
+      var na = (va===null||va===undefined||va===""), nb = (vb===null||vb===undefined||vb==="");
+      if(na && nb) return 0; if(na) return 1; if(nb) return -1;   // vacíos siempre al final
+      var cmp;
+      if(type==="num"){ cmp = (+va) - (+vb); }
+      else if(type==="date"){ cmp = (va instanceof Date?va.getTime():0) - (vb instanceof Date?vb.getTime():0); }
+      else { cmp = String(va).localeCompare(String(vb), "es", {numeric:true}); }
+      return dir * cmp;
+    });
+  }
+  function updateSortIndicators(tableId){
+    var s = sortState[tableId] || {};
+    document.querySelectorAll("#"+tableId+" thead th[data-key]").forEach(function(th){
+      var base = th.getAttribute("data-label");
+      if(base===null){ base = th.textContent; th.setAttribute("data-label", base); }
+      th.innerHTML = base + (th.dataset.key===s.key ? '<span class="arr">'+(s.dir>0?"▲":"▼")+'</span>' : "");
+    });
+  }
+  function rerenderTable(tableId){
+    if(tableId==="tablePromo"){ if(lastResult) renderPromotores(lastResult.promotores); }
+    else if(tableId==="tableTienda"){ if(lastResult) renderTiendaTable(lastResult.tiendas); }
+    else if(tableId==="tableMotivo"){ renderMotivo(lastMotivo, state.isSample); }
+  }
+  function initSortable(tableId){
+    var thead = document.querySelector("#"+tableId+" thead");
+    if(!thead) return;
+    thead.addEventListener("click", function(e){
+      var th = e.target.closest("th"); if(!th || !th.dataset.key) return;
+      var s = sortState[tableId];
+      if(s && s.key===th.dataset.key){ s.dir = -s.dir; }               // segundo clic: invierte
+      else { s = {key:th.dataset.key, type:(th.dataset.type||"text"), dir:(th.dataset.type==="text"?1:-1)}; } // texto A→Z, num/fecha mayor→menor
+      sortState[tableId] = s;
+      updateSortIndicators(tableId);
+      rerenderTable(tableId);
+    });
   }
 
   function efecFilterVal(){ var e = document.getElementById("filterEfec"); return e ? e.value : "ALL"; }
@@ -807,36 +859,17 @@ window.RADAR_MS = {
     return true;
   }
 
-  function renderSummary(promotores){
-    var q = norm(document.getElementById("searchResumen").value);
-    var rows = promotores.slice()
-      .filter(function(p){ return efecPass(p.pctEfec); })
-      .filter(function(p){ return !q || norm(p.promotor).indexOf(q)!==-1; })
-      .sort(function(a,b){ return (a.pctEfec==null?-1:a.pctEfec) - (b.pctEfec==null?-1:b.pctEfec); });
-    document.getElementById("resumenCount").textContent = rows.length;
-    var tbody = document.querySelector("#tableResumen tbody");
-    tbody.innerHTML = rows.map(function(p){
-      var noEfec = p.nCob - p.nEfec;
-      var pctNoEfec = p.nCob ? (noEfec/p.nCob*100) : null;
-      return '<tr>'+
-        '<td class="nowrap">'+esc(p.promotor)+'</td>'+
-        '<td class="num">'+p.nStores+'</td>'+
-        '<td class="num">'+p.nProg+'</td>'+
-        '<td class="num">'+p.nCob+'</td>'+
-        '<td class="num"><span class="chip '+pctChipClass(p.pctCob)+'">'+p.pctCob.toFixed(1)+'%</span></td>'+
-        '<td class="num">'+p.nEfec+'</td>'+
-        '<td class="num">'+(p.pctEfec===null?"—":'<span class="chip '+pctChipClass(p.pctEfec)+'">'+p.pctEfec.toFixed(1)+'%</span>')+'</td>'+
-        '<td class="num">'+(p.nCob? noEfec : 0)+'</td>'+
-        '<td class="num">'+(pctNoEfec===null?"—":pctNoEfec.toFixed(1)+"%")+'</td>'+
-      '</tr>';
-    }).join("") || '<tr><td colspan="9" style="color:var(--text-muted)">Sin resultados.</td></tr>';
-  }
-
-  function renderPromoTable(promotores){
+  function renderPromotores(promotores){
     var q = norm(document.getElementById("searchPromo").value);
-    var rows = promotores.slice().sort(function(a,b){ return a.pctCob - b.pctCob; })
+    var rows = promotores.map(function(p){
+        var noEfec = p.nCob - p.nEfec;
+        return Object.assign({}, p, { noEfec: noEfec, pctNoEfec: p.nCob ? (noEfec/p.nCob*100) : null });
+      })
       .filter(function(p){ return efecPass(p.pctEfec); })
       .filter(function(p){ return !q || norm(p.promotor).indexOf(q)!==-1 || norm(p.provincia).indexOf(q)!==-1; });
+    rows.sort(function(a,b){ return a.pctCob - b.pctCob; });   // orden por defecto: peor cobertura primero
+    rows = applySort(rows, "tablePromo");
+    document.getElementById("promoCount").textContent = rows.length;
     var tbody = document.querySelector("#tablePromo tbody");
     tbody.innerHTML = rows.map(function(p){
       var cls = p.pctCob < cfg.red || p.neverCovered>0 ? "row-crit" : (p.pctCob < cfg.green ? "row-warn" : "");
@@ -848,16 +881,19 @@ window.RADAR_MS = {
         '<td class="num">'+p.nCob+'</td>'+
         '<td class="num"><span class="chip '+pctChipClass(p.pctCob)+'">'+p.pctCob.toFixed(1)+'%</span></td>'+
         '<td class="num">'+p.nEfec+'</td>'+
-        '<td class="num">'+(p.pctEfec===null?"—":p.pctEfec.toFixed(1)+"%")+'</td>'+
+        '<td class="num">'+(p.pctEfec===null?"—":'<span class="chip '+pctChipClass(p.pctEfec)+'">'+p.pctEfec.toFixed(1)+'%</span>')+'</td>'+
+        '<td class="num">'+(p.nCob? p.noEfec : 0)+'</td>'+
+        '<td class="num">'+(p.pctNoEfec===null?"—":p.pctNoEfec.toFixed(1)+"%")+'</td>'+
         '<td class="num">'+(p.neverCovered>0 ? '<span class="chip crit">'+p.neverCovered+'</span>' : '0')+'</td>'+
       '</tr>';
-    }).join("") || '<tr><td colspan="9" style="color:var(--text-muted)">Sin resultados.</td></tr>';
+    }).join("") || '<tr><td colspan="11" style="color:var(--text-muted)">Sin resultados.</td></tr>';
   }
 
   function renderTiendaTable(tiendas){
     var q = norm(document.getElementById("searchTienda").value);
     var rows = tiendas.slice().sort(function(a,b){ return b.racha - a.racha || (b.weeksSince||0)-(a.weeksSince||0); })
       .filter(function(t){ return !q || norm(t.estacion).indexOf(q)!==-1 || norm(t.promotor).indexOf(q)!==-1 || norm(t.cadena).indexOf(q)!==-1 || norm(t.distrito).indexOf(q)!==-1 || norm(t.provincia).indexOf(q)!==-1; });
+    rows = applySort(rows, "tableTienda");
     var tbody = document.querySelector("#tableTienda tbody");
     tbody.innerHTML = rows.map(function(t){
       var cls = t.racha >= cfg.racha ? "row-crit" : (t.pctCob < cfg.green ? "row-warn" : "");
@@ -884,6 +920,7 @@ window.RADAR_MS = {
     var filtered = rows.filter(function(r){
       return !q || norm(r.estacion).indexOf(q)!==-1 || norm(r.promotor).indexOf(q)!==-1 || norm(r.comentario).indexOf(q)!==-1 || norm(r.distrito).indexOf(q)!==-1;
     });
+    filtered = applySort(filtered, "tableMotivo");
     var tbody = document.querySelector("#tableMotivo tbody");
     tbody.innerHTML = filtered.length ? filtered.map(function(r){
       return '<tr>'+
@@ -916,7 +953,7 @@ window.RADAR_MS = {
   });
   document.getElementById("filterPromotor").addEventListener("change", applyFiltersAndRender);
   document.getElementById("filterEfec").addEventListener("change", function(){
-    if(lastResult){ renderSummary(lastResult.promotores); renderPromoTable(lastResult.promotores); }
+    if(lastResult){ renderPromotores(lastResult.promotores); }
   });
   (function(){
     var weekBtnEl = document.getElementById("weekBtn");
@@ -932,10 +969,10 @@ window.RADAR_MS = {
       }
     });
   })();
-  document.getElementById("searchResumen").addEventListener("input", function(){ if(lastResult) renderSummary(lastResult.promotores); });
-  document.getElementById("searchPromo").addEventListener("input", function(){ if(lastResult) renderPromoTable(lastResult.promotores); });
+  document.getElementById("searchPromo").addEventListener("input", function(){ if(lastResult) renderPromotores(lastResult.promotores); });
   document.getElementById("searchTienda").addEventListener("input", function(){ if(lastResult) renderTiendaTable(lastResult.tiendas); });
   document.getElementById("searchMotivo").addEventListener("input", function(){ renderMotivo(lastMotivo, state.isSample); });
+  initSortable("tablePromo"); initSortable("tableTienda"); initSortable("tableMotivo");
 
   // ═══════ Conexión en vivo con SharePoint (Microsoft Graph + MSAL) ═══════
   var MS = window.RADAR_MS || {};
