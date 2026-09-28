@@ -221,6 +221,38 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 .methodology-body code{font-family:"IBM Plex Mono",monospace; background:var(--surface-2); padding:1px 5px; border-radius:4px; font-size:12px;}
 
 [hidden]{display:none !important;}
+
+.view-toggle{display:flex; gap:8px; margin-bottom:18px;}
+.vt-btn{
+  font-family:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px;
+  border:1px solid var(--border); background:var(--surface); color:var(--text-muted); cursor:pointer;
+}
+.vt-btn:hover{color:var(--accent);}
+.vt-btn.active{background:var(--accent); border-color:var(--accent); color:var(--surface);}
+
+.filter-field input[type=date]{
+  font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); min-width:150px;
+}
+.filter-field input[type=date]:disabled{opacity:.55; cursor:not-allowed;}
+
+table.matrix-table{font-size:12.5px;}
+table.matrix-table th, table.matrix-table td{text-align:center; padding:6px 10px;}
+table.matrix-table th.sticky-col, table.matrix-table td.sticky-col{
+  position:sticky; left:0; z-index:2; background:var(--surface); text-align:left; font-weight:600;
+  border-right:1px solid var(--border); white-space:nowrap;
+}
+table.matrix-table thead th.sticky-col{ z-index:4; background:var(--surface-2); }
+.matrix-cell{min-width:56px;}
+.matrix-cell.empty{color:var(--text-muted); opacity:.5;}
+.matrix-cell.miss .mc-total{color:var(--crit);}
+.mc-total{font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:13.5px;}
+.mc-split{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--text-muted); margin-top:1px;}
+.mc-split .ok{color:var(--ok); font-weight:600;}
+.mc-split .crit{color:var(--crit); font-weight:600;}
+.matrix-total-col{background:var(--accent-soft);}
+#tableMatrix tfoot td{border-top:2px solid var(--border); font-weight:700; background:var(--surface-2);}
+#tableMatrix tfoot td.sticky-col{background:var(--surface-2);}
 </style>
 </head>
 <body>
@@ -268,19 +300,32 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   <span><strong>Mostrando datos de ejemplo.</strong> Carga tu archivo de VALIDACIÓN_2026 arriba para ver tus promotores y tiendas reales, y activar los filtros.</span>
 </div>
 
+<div class="view-toggle">
+  <button type="button" class="vt-btn active" id="vtResumen">📋 Resumen (semanal)</button>
+  <button type="button" class="vt-btn" id="vtMatriz">🗓️ Matriz diaria por promotor</button>
+</div>
+
 <div class="filter-bar">
-  <div class="filter-field">
+  <div class="filter-field" id="weekField">
     <label>Semanas</label>
     <div class="ms">
       <button type="button" class="ms-btn" id="weekBtn" disabled><span id="weekBtnLabel">Todas las semanas</span><span class="caret">▾</span></button>
       <div class="ms-panel" id="weekPanel" hidden></div>
     </div>
   </div>
+  <div class="filter-field" id="desdeField" hidden>
+    <label for="matrixDesde">Desde</label>
+    <input type="date" id="matrixDesde" disabled>
+  </div>
+  <div class="filter-field" id="hastaField" hidden>
+    <label for="matrixHasta">Hasta</label>
+    <input type="date" id="matrixHasta" disabled>
+  </div>
   <div class="filter-field">
     <label for="filterPromotor">Promotor</label>
     <select id="filterPromotor" disabled><option value="ALL">Todos los promotores</option></select>
   </div>
-  <div class="filter-field">
+  <div class="filter-field" id="efecField">
     <label for="filterEfec">% Efectividad</label>
     <select id="filterEfec" disabled>
       <option value="ALL">Toda la efectividad</option>
@@ -296,7 +341,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 
 <div class="kpi-strip" id="kpiStrip"></div>
 
-<section class="alerts">
+<section class="alerts" id="alertsSection">
   <div class="alerts-grid">
     <div class="alert-panel">
       <h2>🔴 Promotores críticos <span class="count-pill chip crit" id="critPromoCount">0</span></h2>
@@ -311,7 +356,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   </div>
 </section>
 
-<section class="tables">
+<section class="tables" id="tablesSection">
   <div class="table-block">
     <div class="table-head">
       <h2>Promotores · cobertura y efectividad <span class="count-pill chip" id="promoCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
@@ -388,6 +433,23 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   </div>
 </section>
 
+<section class="matrix-section" id="matrixSection" hidden>
+  <div class="kpi-strip" id="matrixKpiStrip"></div>
+  <div class="table-block">
+    <div class="table-head">
+      <h2>🗓️ Matriz diaria de cobertura <span class="count-pill chip" id="matrixPromoCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
+      <span class="desc">Filas: promotores · columnas: cada día del rango seleccionado (arriba, en "Desde"/"Hasta"). En cada celda: N° de PDVs cubiertos ese día, y debajo el desglose efectivas/no efectivas. "·" = el promotor no tenía ninguna tienda ruteada ese día.</span>
+    </div>
+    <div class="table-scroll">
+      <table id="tableMatrix" class="matrix-table">
+        <thead><tr id="matrixHeadRow"><th class="sticky-col">Promotor</th></tr></thead>
+        <tbody id="matrixBody"></tbody>
+        <tfoot id="matrixFoot"></tfoot>
+      </table>
+    </div>
+  </div>
+</section>
+
 <footer class="meta">
   <details class="methodology">
     <summary>ℹ️ Cómo se calcula esto</summary>
@@ -398,6 +460,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
       <p>La tabla de <strong>motivo de no efectividad</strong> muestra el comentario registrado cuando la tienda sí fue visitada pero la visita no se consideró efectiva (columna "Comentario no efectivo" del archivo). Las tiendas que directamente no se visitaron aparecen en la tabla de Tiendas, no aquí.</p>
       <p>Nota de datos: se unifica automáticamente "WILLGERSON PAJITA" / "WILGERSON PAJITA" como un mismo promotor (variante de tipeo detectada en el archivo real). Si aparecen otras variantes de nombre, edítalas en el archivo fuente para que no se cuenten por separado.</p>
       <p>Este radar no reemplaza el archivo semanal detallado — para un Excel con el detalle línea por línea de cada visita perdida, pídeselo a Claude.</p>
+      <p><strong>Vista "Matriz diaria"</strong> (botón arriba de los filtros): cambia las filas/columnas a promotor × día. Usa el rango <strong>Desde/Hasta</strong> (no las semanas) para elegir qué días mostrar — no está limitado a la ventana de semanas configurada arriba. Cada celda muestra los PDVs cubiertos ese día y, debajo, cuántos fueron efectivos/no efectivos; "·" significa que ese promotor no tenía ninguna tienda ruteada ese día (no es una alerta), mientras que un "0" en rojo sí indica una visita programada que no se cubrió.</p>
     </div>
   </details>
 </footer>
@@ -431,6 +494,20 @@ window.RADAR_MS = {
   }
   function esc(s){
     return String(s===null||s===undefined?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  function dayKeyOf(date){
+    var x = new Date(date.getTime());
+    x.setHours(0,0,0,0);
+    return x.toISOString().slice(0,10);
+  }
+  function fmtDateShort(d){
+    if(!(d instanceof Date) || isNaN(d)) return "—";
+    try{ return new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short"}).format(d).replace(".",""); }
+    catch(e){ return d.toISOString().slice(5,10); }
+  }
+  function weekdayShort(d){
+    try{ return new Intl.DateTimeFormat("es-PE",{weekday:"short"}).format(d).toUpperCase().replace(".",""); }
+    catch(e){ return ""; }
   }
   function mondayOf(date){
     var d = new Date(date.getTime());
@@ -621,9 +698,31 @@ window.RADAR_MS = {
     ];
   }
 
+  function sampleMatrixData(){
+    var max = new Date(2026,8,12);
+    function day(off){ var dt=new Date(max.getTime()-off*24*3600*1000); dt.setHours(0,0,0,0); return dt; }
+    var dates = [6,5,4,3,2,1,0].map(day);
+    var keys = dates.map(dayKeyOf);
+    var raw = {
+      "EJEMPLO — A. TORRES": [ {prog:3,cob:1,efec:1}, null, {prog:2,cob:0,efec:0}, {prog:3,cob:2,efec:1}, null, {prog:2,cob:1,efec:1}, {prog:2,cob:2,efec:2} ],
+      "EJEMPLO — C. RAMOS":  [ {prog:2,cob:2,efec:2}, {prog:3,cob:2,efec:2}, null, {prog:2,cob:1,efec:1}, {prog:3,cob:3,efec:2}, {prog:2,cob:2,efec:2}, null ],
+      "EJEMPLO — M. FLORES": [ {prog:3,cob:3,efec:3}, {prog:2,cob:2,efec:2}, {prog:3,cob:3,efec:2}, null, {prog:2,cob:2,efec:2}, {prog:3,cob:3,efec:3}, null ],
+      "EJEMPLO — R. DÍAZ":   [ {prog:2,cob:2,efec:2}, null, {prog:2,cob:2,efec:2}, {prog:3,cob:3,efec:3}, null, {prog:2,cob:2,efec:2}, null ]
+    };
+    var byPromo = {};
+    Object.keys(raw).forEach(function(p){
+      byPromo[p] = {};
+      raw[p].forEach(function(cell, i){
+        if(!cell) return;
+        byPromo[p][keys[i]] = {prog:cell.prog, cob:cell.cob, efec:cell.efec, noEfec:cell.cob-cell.efec};
+      });
+    });
+    return {dates:dates, byPromo:byPromo, promotores:Object.keys(raw).sort()};
+  }
+
   // ---------- state ----------
   var cfg = {weeks:8, green:95, red:75, racha:2};
-  var state = { rawRecords:null, windowed:[], maxDate:null, windowStart:null, isSample:true, weekSel:[] };
+  var state = { rawRecords:null, windowed:[], maxDate:null, windowStart:null, isSample:true, weekSel:[], view:"resumen" };
   var lastResult = null, lastMotivo = [];
 
   function loadCfg(){
@@ -693,10 +792,19 @@ window.RADAR_MS = {
     });
   }
 
+  function fullRange(records){
+    if(!records || !records.length) return {min:null, max:null};
+    var min = records[0].fecha, max = records[0].fecha;
+    records.forEach(function(r){ if(r.fecha < min) min = r.fecha; if(r.fecha > max) max = r.fecha; });
+    return {min:min, max:max};
+  }
+
   function populateFilterOptions(){
     var promoSel = document.getElementById("filterPromotor");
     var weekBtn = document.getElementById("weekBtn");
     var weekPanel = document.getElementById("weekPanel");
+    var desdeEl = document.getElementById("matrixDesde");
+    var hastaEl = document.getElementById("matrixHasta");
     if(state.isSample || !state.windowed.length){
       state._weekKeys = []; state._weekMap = {}; state.weekSel = [];
       weekPanel.innerHTML = ""; weekPanel.hidden = true;
@@ -705,10 +813,20 @@ window.RADAR_MS = {
       promoSel.innerHTML = '<option value="ALL">Todos los promotores</option>';
       promoSel.disabled = true;
       var efSel0 = document.getElementById("filterEfec"); if(efSel0){ efSel0.value = "ALL"; efSel0.disabled = true; }
+      desdeEl.disabled = true; hastaEl.disabled = true; desdeEl.value = ""; hastaEl.value = "";
       return;
     }
     weekBtn.disabled = false; promoSel.disabled = false;
     var efSel = document.getElementById("filterEfec"); if(efSel) efSel.disabled = false;
+
+    var full = fullRange(state.rawRecords);
+    if(full.min && full.max){
+      desdeEl.disabled = false; hastaEl.disabled = false;
+      desdeEl.min = hastaEl.min = dayKeyOf(full.min);
+      desdeEl.max = hastaEl.max = dayKeyOf(full.max);
+      if(!desdeEl.value){ desdeEl.value = dayKeyOf(new Date(Math.max(full.min.getTime(), full.max.getTime()-6*24*3600*1000))); }
+      if(!hastaEl.value){ hastaEl.value = dayKeyOf(full.max); }
+    }
 
     var weeks = {};
     state.windowed.forEach(function(r){ var k=weekKeyOf(r.fecha); if(!weeks[k]) weeks[k]=mondayOf(r.fecha); });
@@ -739,6 +857,7 @@ window.RADAR_MS = {
     if(state.isSample || !state.windowed.length){
       render(sampleResult(), true);
       renderMotivo(sampleMotivo(), true);
+      renderMatrixNow();
       return;
     }
     var weekSel = state.weekSel || [];
@@ -761,6 +880,120 @@ window.RADAR_MS = {
       .sort(function(a,b){ return b.fecha - a.fecha; })
       .map(function(r){ return {fecha:r.fecha, dia:r.diaRuteado, promotor:r.promotor, cadena:r.cadena, estacion:r.estacion, distrito:r.distrito, provincia:r.provincia, comentario:r.comentario}; });
     renderMotivo(motivo, false);
+    renderMatrixNow();
+  }
+
+  // ---------- matriz diaria (filas: promotor, columnas: día) ----------
+  function buildMatrixFromRecords(records, desdeKey, hastaKey, promoFilter){
+    var byPromo = {};
+    var dateSet = {};
+    records.forEach(function(r){
+      var k = dayKeyOf(r.fecha);
+      if(k < desdeKey || k > hastaKey) return;
+      if(promoFilter !== "ALL" && r.promotor !== promoFilter) return;
+      var p = r.promotor || "(SIN PROMOTOR)";
+      dateSet[k] = r.fecha;
+      byPromo[p] = byPromo[p] || {};
+      var cell = byPromo[p][k] = byPromo[p][k] || {prog:0, cob:0, efec:0, noEfec:0};
+      cell.prog++;
+      if(r.cobertura){ cell.cob++; if(r.efectividad) cell.efec++; else cell.noEfec++; }
+    });
+    var dates = Object.keys(dateSet).sort().map(function(k){ var d = new Date(dateSet[k].getTime()); d.setHours(0,0,0,0); return d; });
+    var promotores = Object.keys(byPromo).sort(function(a,b){ return a.localeCompare(b,"es"); });
+    return {dates:dates, byPromo:byPromo, promotores:promotores};
+  }
+
+  function renderMatrix(m, sample){
+    document.getElementById("matrixPromoCount").textContent = m.promotores.length;
+
+    var totalCob=0, totalEfec=0;
+    m.promotores.forEach(function(p){
+      m.dates.forEach(function(d){
+        var cell = (m.byPromo[p]||{})[dayKeyOf(d)];
+        if(cell){ totalCob += cell.cob; totalEfec += cell.efec; }
+      });
+    });
+    var pctEfecGlobal = totalCob ? totalEfec/totalCob*100 : 0;
+    var rangeLabel = m.dates.length ? (fmtDateShort(m.dates[0])+" – "+fmtDateShort(m.dates[m.dates.length-1])) : "";
+    document.getElementById("matrixKpiStrip").innerHTML = [
+      ["Días mostrados", m.dates.length, rangeLabel],
+      ["Promotores con ruta", m.promotores.length, ""],
+      ["PDVs cubiertos", totalCob.toLocaleString("es-PE"), "en el rango"],
+      ["% Efectividad", pctEfecGlobal.toFixed(1)+"%", totalEfec.toLocaleString("es-PE")+" efectivas"]
+    ].map(function(c){
+      return '<div class="kpi-card"><span class="label">'+esc(c[0])+'</span><span class="value">'+esc(c[1])+'</span><span class="sub">'+esc(c[2])+'</span></div>';
+    }).join("");
+
+    var headRow = document.getElementById("matrixHeadRow");
+    headRow.innerHTML = '<th class="sticky-col">Promotor</th>' +
+      m.dates.map(function(d){ return '<th>'+weekdayShort(d)+'<br>'+fmtDateShort(d)+'</th>'; }).join("") +
+      '<th class="matrix-total-col">Total periodo</th>';
+
+    var tbody = document.getElementById("matrixBody");
+    tbody.innerHTML = m.promotores.length ? m.promotores.map(function(p){
+      var rCob=0, rEfec=0, rNoEfec=0;
+      var cellsHtml = m.dates.map(function(d){
+        var cell = (m.byPromo[p]||{})[dayKeyOf(d)];
+        if(!cell){ return '<td class="matrix-cell empty" title="Sin ruta programada">·</td>'; }
+        rCob += cell.cob; rEfec += cell.efec; rNoEfec += cell.noEfec;
+        if(cell.cob === 0){
+          return '<td class="matrix-cell miss" title="'+cell.prog+' programada(s), 0 cubiertas"><div class="mc-total">0</div></td>';
+        }
+        return '<td class="matrix-cell" title="'+cell.cob+' cubiertas de '+cell.prog+' programadas">'+
+          '<div class="mc-total">'+cell.cob+'</div>'+
+          '<div class="mc-split"><span class="ok">'+cell.efec+'</span>/<span class="crit">'+cell.noEfec+'</span></div>'+
+        '</td>';
+      }).join("");
+      return '<tr>'+
+        '<td class="sticky-col">'+esc(p)+'</td>'+
+        cellsHtml+
+        '<td class="matrix-cell matrix-total-col"><div class="mc-total">'+rCob+'</div>'+
+          '<div class="mc-split"><span class="ok">'+rEfec+'</span>/<span class="crit">'+rNoEfec+'</span></div></td>'+
+      '</tr>';
+    }).join("") : '<tr><td colspan="'+(m.dates.length+2)+'" style="color:var(--text-muted)">Sin visitas programadas en el rango/filtro seleccionado.</td></tr>';
+
+    var grandCob=0, grandEfec=0, grandNoEfec=0;
+    var footCells = m.dates.map(function(d){
+      var k = dayKeyOf(d);
+      var cob=0, efec=0, noEfec=0;
+      m.promotores.forEach(function(p){ var c=(m.byPromo[p]||{})[k]; if(c){ cob+=c.cob; efec+=c.efec; noEfec+=c.noEfec; } });
+      grandCob+=cob; grandEfec+=efec; grandNoEfec+=noEfec;
+      return '<td class="matrix-cell"><div class="mc-total">'+cob+'</div><div class="mc-split"><span class="ok">'+efec+'</span>/<span class="crit">'+noEfec+'</span></div></td>';
+    }).join("");
+    document.getElementById("matrixFoot").innerHTML = m.dates.length ? ('<tr><td class="sticky-col">Total del día</td>'+footCells+
+      '<td class="matrix-cell matrix-total-col"><div class="mc-total">'+grandCob+'</div><div class="mc-split"><span class="ok">'+grandEfec+'</span>/<span class="crit">'+grandNoEfec+'</span></div></td></tr>') : "";
+  }
+
+  function renderMatrixNow(){
+    if(state.isSample || !state.rawRecords || !state.rawRecords.length){
+      renderMatrix(sampleMatrixData(), true);
+      return;
+    }
+    var desdeEl = document.getElementById("matrixDesde"), hastaEl = document.getElementById("matrixHasta");
+    var desdeKey = desdeEl.value || dayKeyOf(state.windowStart || state.maxDate);
+    var hastaKey = hastaEl.value || dayKeyOf(state.maxDate);
+    if(desdeKey > hastaKey){ var tmp = desdeKey; desdeKey = hastaKey; hastaKey = tmp; }
+    var promoFilter = document.getElementById("filterPromotor").value || "ALL";
+    renderMatrix(buildMatrixFromRecords(state.rawRecords, desdeKey, hastaKey, promoFilter), false);
+  }
+
+  function setView(v){
+    state.view = v;
+    document.getElementById("vtResumen").classList.toggle("active", v==="resumen");
+    document.getElementById("vtMatriz").classList.toggle("active", v==="matriz");
+    document.getElementById("weekField").hidden = v!=="resumen";
+    document.getElementById("efecField").hidden = v!=="resumen";
+    document.getElementById("desdeField").hidden = v!=="matriz";
+    document.getElementById("hastaField").hidden = v!=="matriz";
+    document.getElementById("kpiStrip").hidden = v!=="resumen";
+    document.getElementById("alertsSection").hidden = v!=="resumen";
+    document.getElementById("tablesSection").hidden = v!=="resumen";
+    document.getElementById("matrixSection").hidden = v!=="matriz";
+    document.getElementById("filterHint").textContent = v==="resumen"
+      ? "Semanas y promotor aplican a todo; % efectividad filtra la tabla de promotores."
+      : "Elige el rango de fechas (Desde/Hasta) y opcionalmente un promotor para ver la matriz diaria.";
+    if(v==="matriz") renderMatrixNow();
+    reportHeight();
   }
 
   function render(result, sample){
@@ -955,6 +1188,10 @@ window.RADAR_MS = {
   document.getElementById("filterEfec").addEventListener("change", function(){
     if(lastResult){ renderPromotores(lastResult.promotores); }
   });
+  document.getElementById("matrixDesde").addEventListener("change", renderMatrixNow);
+  document.getElementById("matrixHasta").addEventListener("change", renderMatrixNow);
+  document.getElementById("vtResumen").addEventListener("click", function(){ setView("resumen"); });
+  document.getElementById("vtMatriz").addEventListener("click", function(){ setView("matriz"); });
   (function(){
     var weekBtnEl = document.getElementById("weekBtn");
     var weekPanelEl = document.getElementById("weekPanel");
@@ -1108,6 +1345,7 @@ window.RADAR_MS = {
   populateFilterOptions();
   render(sampleResult(), true);
   renderMotivo(sampleMotivo(), true);
+  setView("resumen");
   initMs();
 
   // ---------- auto-ajuste de altura dentro del iframe de BAT 360 ----------
