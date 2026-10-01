@@ -475,7 +475,7 @@ window.RADAR_MS = {
   clientId: "dea7ddf0-2d41-4e5d-9971-3e37d163948c",   // app "bat360" en Entra (SPA redirect)
   tenant:   "9d85a34e-57e5-4f82-9341-7dd9300077b7",   // Directory (tenant) ID de TT Audit
   scopes:   ["Files.Read.All"],
-  shareUrl: "https://ttauditperu-my.sharepoint.com/:x:/g/personal/drueda_ttauditperu_onmicrosoft_com/IQD6lr_1xH9dTbYB8A_BS5itAb9S0bpZzd5ISNyQzT1wPDA?e=nUkEHC"
+  shareUrl: "https://ttauditperu-my.sharepoint.com/:x:/r/personal/acastro_ttauditperu_onmicrosoft_com/_layouts/15/Doc.aspx?sourcedoc=%7BF5BF96FA-7FC4-4D5D-B601-F00FC14B98AD%7D&file=VALIDACI%25u00d3N_2026.xlsx&action=default&mobileredirect=true"
 };
 </script>
 <script>
@@ -1269,6 +1269,10 @@ window.RADAR_MS = {
         status.textContent = "⚠ Login en curso o interrumpido. Recarga la página (F5) e intenta de nuevo, completando el inicio de sesión sin cerrar la ventana.";
       } else if(msg.indexOf("popup_window_error") !== -1 || msg.indexOf("BrowserAuthError: popup") !== -1){
         status.textContent = "⚠ El navegador bloqueó la ventana de inicio de sesión. Permite ventanas emergentes para bat360.vercel.app e intenta otra vez.";
+      } else if(msg.indexOf("Graph HTTP 403") !== -1){
+        status.textContent = "⚠ Tu cuenta inició sesión correctamente, pero no tiene acceso al archivo de VALIDACIÓN compartido (error 403). Pide a quien lo comparte que te agregue como destinatario (o mueva el archivo a un sitio/Teams compartido), y vuelve a intentar. Mientras tanto usa la carga manual del archivo.";
+      } else if(msg.indexOf("Graph HTTP 404") !== -1){
+        status.textContent = "⚠ No se encontró el archivo compartido (error 404). El link puede haber cambiado o el archivo se movió/renombró — pide un link nuevo.";
       } else {
         status.textContent = "⚠ No se pudo cargar desde SharePoint: " + msg;
       }
