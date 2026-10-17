@@ -103,15 +103,15 @@
 </style>
 </head>
 <body>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <!-- LOGIN -->
 <div id="login" style="position:fixed;inset:0;z-index:200;background:var(--navy);display:flex;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:34px 30px;width:340px;max-width:90vw;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.3)">
     <h1 style="font-size:22px;color:var(--navy)">BAT <b style="color:var(--gold)">360</b></h1>
     <p style="font-size:12px;color:var(--muted);margin:4px 0 20px">Gestión de cuenta · TT Audit</p>
-    <input id="login-pass" type="password" placeholder="Clave de acceso" autofocus
-      style="width:100%;text-align:center" onkeydown="if(event.key==='Enter')entrar()">
-    <button class="btn" style="width:100%;margin-top:12px" onclick="entrar()">Ingresar</button>
-    <p id="login-err" style="color:var(--bad);font-size:12px;margin-top:10px;display:none">Clave incorrecta</p>
+    <div id="g-btn" style="display:flex;justify-content:center;min-height:44px"></div>
+    <p style="font-size:11.5px;color:var(--muted);margin-top:12px">Ingresa con tu cuenta @ttaudit.com</p>
+    <p id="login-err" style="color:var(--bad);font-size:12px;margin-top:10px;display:none">Esta cuenta no tiene acceso a la plataforma.</p>
   </div>
 </div>
 <div class="app" style="display:none" id="appRoot">
@@ -147,6 +147,8 @@
       <div class="status">
         <span class="dot" id="conn-dot"></span>
         <span id="conn-txt">Sin conectar</span>
+        <span class="muted" id="user-txt" style="font-size:12px"></span>
+        <button class="btn sec sm" onclick="salir()">Salir</button>
         <button class="btn sec sm" onclick="cargarTodo()">↻ Actualizar</button>
       </div>
     </div>
@@ -162,8 +164,18 @@
 
 <script>
 // ════════ ESTADO ════════
-// 🔑 Cambia esta clave por la que quieras. Es la que pedirá la pantalla de ingreso.
-const CLAVE = 'BAT360';
+// 🔑 Login con Google. Pega aquí el Client ID (OAuth, tipo "Aplicación web") creado en Google Cloud.
+const GOOGLE_CLIENT_ID = '382427877987-j68n1tmm6ers3biekqamem2jlrdguubj.apps.googleusercontent.com';
+// Permisos por correo. '*' = todo. Vistas: resumen, facturacion, gastos, margen, promotoria, merch, calendario, config
+// Pestañas de Merch: ots, proyectos, compras
+const USUARIOS = {
+  'ccamarena@ttaudit.com':      { vistas:['*'], merchTabs:['*'] },
+  'acastro@ttaudit.com':        { vistas:['promotoria'], merchTabs:[] },
+  'mcarhuallanqui@ttaudit.com': { vistas:['merch'], merchTabs:['ots','proyectos'] }, // sin Compra de materiales
+};
+let USER = null;
+const puedeVista = v => !!USER && (USER.vistas.includes('*') || USER.vistas.includes(v));
+const puedeMerchTab = t => !!USER && (USER.merchTabs.includes('*') || USER.merchTabs.includes(t));
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbwnfh98OMw0mVuBIF02OUPrWmCpcyrH7tOaOmtFSY1dmJtxreoiMWudJ1tPiZYS8NgAvA/exec';
 // Cotizador TT (Supabase) — PPTOs aprobados que cargan los coordinadores (solo lectura)
 const SUPABASE_URL = 'https://pcahvqhczgdmpvsitvlo.supabase.co';
@@ -286,7 +298,7 @@ const TITLES = {
   config:['Configuración','Conexión con Google Sheets'],
 };
 document.getElementById('nav').addEventListener('click',e=>{
-  const a=e.target.closest('a'); if(!a||a.classList.contains('soon')||!a.dataset.view) return;
+  const a=e.target.closest('a'); if(!a||a.classList.contains('soon')||!a.dataset.view||!puedeVista(a.dataset.view)) return;
   document.querySelectorAll('.nav a').forEach(x=>x.classList.remove('active'));
   a.classList.add('active');
   STATE.view=a.dataset.view;
@@ -298,6 +310,7 @@ document.getElementById('nav').addEventListener('click',e=>{
 // ════════ RENDER ════════
 function render(){
   const c = el('content');
+  if(!puedeVista(STATE.view)){ c.innerHTML=''; return; }
   if(STATE.view!=='config' && !STATE.url){
     c.innerHTML = `<div class="panel"><div class="empty">
       <h3 style="justify-content:center">⚙️ Conecta tu Google Sheet primero</h3>
@@ -733,11 +746,12 @@ function fmtAvances(arr){ return arr.filter(a=>a.semana).map(a=>`${a.semana}=${a
 
 function renderMerch(c){
   STATE._merchTab = STATE._merchTab || 'ots';
+  if(!puedeMerchTab(STATE._merchTab)) STATE._merchTab = ['ots','proyectos','compras'].find(puedeMerchTab) || 'ots';
   const tab = STATE._merchTab;
   c.innerHTML = `<div class="tabs">
     <button class="${tab==='ots'?'active':''}" onclick="STATE._merchTab='ots';renderMerch(el('content'))">📦 Seguimiento OTs</button>
     <button class="${tab==='proyectos'?'active':''}" onclick="STATE._merchTab='proyectos';renderMerch(el('content'))">📋 Proyectos actuales</button>
-    <button class="${tab==='compras'?'active':''}" onclick="STATE._merchTab='compras';renderMerch(el('content'))">🛍️ Compra de materiales</button>
+    ${puedeMerchTab('compras')?`<button class="${tab==='compras'?'active':''}" onclick="STATE._merchTab='compras';renderMerch(el('content'))">🛍️ Compra de materiales</button>`:''}
   </div><div id="merch-sub"></div>`;
   const sub = el('merch-sub');
   if(tab==='proyectos') renderProyectos(sub);
@@ -1515,25 +1529,62 @@ function cerrarModal(){ el('modal-bg').classList.remove('show'); }
 el('modal-bg').addEventListener('click',e=>{ if(e.target.id==='modal-bg') cerrarModal(); });
 
 // ════════ LOGIN ════════
-function entrar(){
-  const v = el('login-pass').value;
-  if(v === CLAVE){
-    sessionStorage.setItem('bat_auth','1');
-    mostrarApp();
-  } else {
-    el('login-err').style.display='block';
-    el('login-pass').value='';
-    el('login-pass').focus();
-  }
+function decodeJwt(t){
+  const p=t.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+  return JSON.parse(decodeURIComponent(atob(p).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
 }
-function mostrarApp(){
+function onGoogle(resp){
+  try{
+    const p=decodeJwt(resp.credential);
+    const email=(p.email||'').toLowerCase();
+    if(!p.email_verified || !USUARIOS[email]){ el('login-err').style.display='block'; return; }
+    sessionStorage.setItem('bat_cred', resp.credential);
+    iniciarSesion(email, p.name);
+  }catch(e){ el('login-err').style.display='block'; }
+}
+function iniciarSesion(email, nombre){
+  USER = USUARIOS[email];
+  el('user-txt').textContent = nombre || email;
   el('login').style.display='none';
   el('appRoot').style.display='flex';
+  // Menú: solo lo permitido; oculta secciones que queden vacías
+  let sec=null, visibles=0;
+  const cierra=()=>{ if(sec) sec.style.display = visibles?'':'none'; };
+  [...el('nav').children].forEach(n=>{
+    if(n.classList.contains('sec')){ cierra(); sec=n; visibles=0; }
+    else { const ok=puedeVista(n.dataset.view); n.style.display=ok?'':'none'; if(ok) visibles++; }
+  });
+  cierra();
+  const first = puedeVista('resumen') ? 'resumen' : ['facturacion','gastos','margen','promotoria','merch','calendario','config'].find(puedeVista);
+  STATE.view = first;
+  document.querySelectorAll('.nav a').forEach(x=>x.classList.toggle('active', x.dataset.view===first));
+  el('view-title').textContent=TITLES[first][0];
+  el('view-sub').textContent=TITLES[first][1];
   cargarTodo();
+}
+function salir(){
+  sessionStorage.removeItem('bat_cred');
+  if(window.google&&google.accounts) google.accounts.id.disableAutoSelect();
+  location.reload();
 }
 
 // ════════ INIT ════════
-if(sessionStorage.getItem('bat_auth')==='1') mostrarApp();
+(function initLogin(){
+  const cred=sessionStorage.getItem('bat_cred');
+  if(cred){
+    try{
+      const p=decodeJwt(cred); const email=(p.email||'').toLowerCase();
+      if(p.exp*1000>Date.now() && USUARIOS[email]){ iniciarSesion(email,p.name); return; }
+    }catch(e){}
+    sessionStorage.removeItem('bat_cred');
+  }
+  const t=setInterval(()=>{
+    if(!(window.google&&google.accounts&&google.accounts.id)) return;
+    clearInterval(t);
+    google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID, callback:onGoogle, hd:'ttaudit.com'});
+    google.accounts.id.renderButton(el('g-btn'),{theme:'outline',size:'large',text:'signin_with',width:260});
+  },100);
+})();
 </script>
 </body>
 </html>
