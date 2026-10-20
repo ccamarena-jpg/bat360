@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Materiales · BAT 360</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6fa;
+  --surface:#FFFFFF;
+  --surface-2:#f2f5fa;
+  --text:#1b2a47;
+  --text-muted:#6c7a92;
+  --border:#dde4ee;
+  --accent:#1d3b78;
+  --accent-soft:#e2ecfb;
+  --ok:#1f9d57;
+  --ok-bg:#e0f5e8;
+  --warn:#a9760a;
+  --warn-bg:#fcf0d6;
+  --crit:#d6453d;
+  --crit-bg:#fbe3e1;
+  --shadow: 0 1px 3px rgba(21,38,74,.06), 0 4px 14px rgba(21,38,74,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181A; --surface:#1F2224; --surface-2:#26292B; --text:#EDEBE5; --text-muted:#9C9A92;
+    --border:#33363A; --accent:#7FB4D4; --accent-soft:#20343E; --ok:#6FCB99; --ok-bg:#173425;
+    --warn:#E3B15C; --warn-bg:#3A2C10; --crit:#EF8A83; --crit-bg:#3D1E1C;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181A; --surface:#1F2224; --surface-2:#26292B; --text:#EDEBE5; --text-muted:#9C9A92;
+  --border:#33363A; --accent:#7FB4D4; --accent-soft:#20343E; --ok:#6FCB99; --ok-bg:#173425;
+  --warn:#E3B15C; --warn-bg:#3A2C10; --crit:#EF8A83; --crit-bg:#3D1E1C;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;}
+body{
+  background:var(--bg); color:var(--text); font-family:"IBM Plex Sans",'Segoe UI',system-ui,sans-serif;
+  padding-inline:18px; padding-block:14px 28px; max-width:1180px; margin:0 auto;
+}
+.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums;}
+h1,h2,h3{text-wrap:balance; margin:0;}
+a{color:var(--accent);}
+header.top{
+  display:flex; flex-wrap:wrap; gap:16px 24px; justify-content:space-between; align-items:flex-start;
+  padding-bottom:18px; border-bottom:1px solid var(--border); margin-bottom:18px;
+}
+.brand{display:flex; flex-direction:column; gap:4px; min-width:220px;}
+.brand .eyebrow{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); font-weight:600;}
+.brand h1{font-size:26px; font-weight:700;}
+.brand p{margin:2px 0 0; color:var(--text-muted); font-size:13.5px; max-width:48ch;}
+.upload-panel{
+  display:flex; flex-direction:column; gap:8px; background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:14px 16px; box-shadow:var(--shadow); min-width:280px; flex:1 1 320px; max-width:440px;
+}
+.upload-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+.file-btn{
+  background:var(--accent); color:var(--surface); border:none; border-radius:8px; padding:9px 14px;
+  font-family:inherit; font-weight:600; font-size:13.5px; cursor:pointer;
+}
+.file-btn:hover{filter:brightness(1.06);}
+.file-name{font-size:12.5px; color:var(--text-muted); word-break:break-all;}
+#fileInput{display:none;}
+.status-line{font-size:12.5px; color:var(--text-muted);}
+.status-line.err{color:var(--crit);}
+.status-line.ok{color:var(--ok);}
+details.settings{margin-top:2px;}
+details.settings summary{cursor:pointer; font-size:12.5px; color:var(--accent); font-weight:600; list-style:none;}
+details.settings summary::-webkit-details-marker{display:none;}
+.settings-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px 14px; margin-top:10px;}
+.settings-grid label{display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--text-muted); font-weight:600;}
+.settings-grid input{
+  font-family:inherit; font-size:13px; padding:6px 8px; border-radius:6px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text);
+}
+.empty-banner{
+  display:flex; gap:10px; align-items:center; background:var(--accent-soft); color:var(--accent);
+  border:1px solid var(--accent); border-radius:10px; padding:12px 16px; font-size:13.5px; margin-bottom:20px;
+}
+.filter-bar{
+  display:flex; flex-wrap:wrap; gap:12px 16px; align-items:flex-end; background:var(--surface);
+  border:1px solid var(--border); border-radius:12px; padding:12px 16px; box-shadow:var(--shadow); margin-bottom:10px;
+}
+.filter-field{display:flex; flex-direction:column; gap:4px;}
+.filter-field label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:600;}
+.filter-field select{
+  font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); min-width:200px;
+}
+.filter-field select:disabled, .filter-field input:disabled{opacity:.55; cursor:not-allowed;}
+.filter-field input[type=date]{
+  font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); min-width:140px;
+}
+.filter-hint{font-size:12px; color:var(--text-muted); margin:0 0 16px;}
+.ms{position:relative;}
+.ms-btn{
+  font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); min-width:220px; text-align:left; cursor:pointer; display:flex; gap:8px; align-items:center;
+}
+.ms-btn:disabled{opacity:.55; cursor:not-allowed;}
+.ms-btn .caret{margin-left:auto; color:var(--text-muted);}
+.ms-panel{
+  position:absolute; z-index:30; top:calc(100% + 4px); left:0; min-width:260px; max-height:320px; overflow:auto;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); padding:6px;
+}
+.ms-panel label{
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:13px; color:var(--text);
+  cursor:pointer; font-weight:500; text-transform:none; letter-spacing:0;
+}
+.ms-panel label:hover{background:var(--surface-2);}
+.ms-panel .ms-sep{height:1px; background:var(--border); margin:5px 2px;}
+.ms-panel input[type=checkbox]{width:auto; margin:0; accent-color:var(--accent);}
+.kpi-strip{display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px; margin-bottom:26px;}
+.kpi-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px;
+  box-shadow:var(--shadow); display:flex; flex-direction:column; gap:6px;
+}
+.kpi-card .label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-muted); font-weight:600;}
+.kpi-card .value{font-size:24px; font-weight:700; font-family:"IBM Plex Mono", monospace;}
+.kpi-card .sub{font-size:12px; color:var(--text-muted);}
+.chip{display:inline-flex; align-items:center; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; font-family:"IBM Plex Mono",monospace;}
+.chip.ok{background:var(--ok-bg); color:var(--ok);}
+.chip.warn{background:var(--warn-bg); color:var(--warn);}
+.chip.crit{background:var(--crit-bg); color:var(--crit);}
+section.tables{display:flex; flex-direction:column; gap:26px; margin-bottom:24px;}
+.table-block{background:var(--surface); border:1px solid var(--border); border-radius:14px; box-shadow:var(--shadow); overflow:hidden;}
+.table-head{display:flex; flex-wrap:wrap; gap:10px; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border);}
+.table-head h2{font-size:15.5px; display:flex; align-items:center; gap:8px;}
+.table-head .desc{font-size:12px; color:var(--text-muted); flex-basis:100%;}
+.search-box{
+  font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); min-width:180px;
+}
+.table-scroll{overflow-x:auto; max-height:560px;}
+table{border-collapse:collapse; width:100%; font-size:12.8px;}
+thead th{
+  position:sticky; top:0; background:var(--surface-2); text-align:left; padding:9px 12px; font-weight:600;
+  font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--text-muted); white-space:nowrap;
+  border-bottom:1px solid var(--border);
+}
+thead th[data-key]{cursor:pointer; user-select:none;}
+thead th[data-key]:hover{background:var(--accent-soft); color:var(--accent);}
+thead th .arr{opacity:.9; font-size:10px; margin-left:3px;}
+tbody td{padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top;}
+tbody td.nowrap{white-space:nowrap;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr.row-crit{background:var(--crit-bg);}
+tbody tr.row-warn{background:var(--warn-bg);}
+.num{font-family:"IBM Plex Mono",monospace; text-align:right; white-space:nowrap;}
+table.matrix-table{font-size:12.5px;}
+table.matrix-table th, table.matrix-table td{text-align:center; padding:6px 10px;}
+table.matrix-table th.sticky-col, table.matrix-table td.sticky-col{
+  position:sticky; left:0; z-index:2; background:var(--surface); text-align:left; font-weight:600;
+  border-right:1px solid var(--border); white-space:nowrap;
+}
+table.matrix-table thead th.sticky-col{ z-index:4; background:var(--surface-2); }
+.matrix-cell{min-width:64px;}
+.matrix-cell.empty{color:var(--text-muted); opacity:.5;}
+.mc-total{font-family:"IBM Plex Mono",monospace; font-weight:700; font-size:13.5px;}
+.mc-split{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--text-muted); margin-top:1px;}
+.mc-split .ok{color:var(--ok); font-weight:600;}
+.mc-split .crit{color:var(--crit); font-weight:600;}
+.matrix-total-col{background:var(--accent-soft);}
+#tableCadenaMaterial tfoot td{border-top:2px solid var(--border); font-weight:700; background:var(--surface-2);}
+#tableCadenaMaterial tfoot td.sticky-col{background:var(--surface-2);}
+footer.meta{margin-top:8px;}
+details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; color:var(--accent);}
+.methodology-body{font-size:13px; color:var(--text-muted); line-height:1.6; padding-top:10px; max-width:78ch;}
+.methodology-body code{font-family:"IBM Plex Mono",monospace; background:var(--surface-2); padding:1px 5px; border-radius:4px; font-size:12px;}
+[hidden]{display:none !important;}
+.truncate-note{padding:10px 18px; font-size:12px; color:var(--text-muted); border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="eyebrow">TT Audit · Promotoría BAT</span>
+    <h1>Materiales de implementación</h1>
+    <p>Sube el archivo <span class="mono">TRACKER v3.0-beta…xlsx</span> (una pestaña por material) y obtén la implementación por cadena, fecha y promotor. Cada pestaña del Excel con columnas de promotor, fecha e "¿Se implementó?" se detecta automáticamente como un material.</p>
+  </div>
+  <div class="upload-panel">
+    <div class="upload-row" id="msRow" hidden>
+      <button class="file-btn" id="msConnectBtn" type="button">🔗 Conectar SharePoint (en vivo)</button>
+      <button class="file-btn" id="msRefreshBtn" type="button" hidden>↻ Actualizar</button>
+      <span class="file-name" id="msUser"></span>
+    </div>
+    <div class="upload-row">
+      <label class="file-btn" for="fileInput">Cargar archivo .xlsx</label>
+      <input type="file" id="fileInput" accept=".xlsx,.xls" />
+      <span class="file-name" id="fileName">Ningún archivo cargado</span>
+    </div>
+    <div class="status-line" id="msNote" hidden>Conexión en vivo con SharePoint: pendiente de configurar (Client ID de Entra). Mientras tanto usa la carga manual.</div>
+    <div class="status-line" id="statusLine">Esperando archivo…</div>
+    <details class="settings">
+      <summary>⚙ Umbrales del semáforo</summary>
+      <div class="settings-grid">
+        <label>Verde desde (%)
+          <input type="number" id="cfgGreen" min="0" max="100" value="90" />
+        </label>
+        <label>Rojo debajo de (%)
+          <input type="number" id="cfgRed" min="0" max="100" value="70" />
+        </label>
+      </div>
+    </details>
+  </div>
+</header>
+
+<div class="empty-banner" id="emptyBanner">
+  <span>📦</span>
+  <span>Carga el Excel de materiales (botón arriba) para ver la implementación por cadena, fecha y promotor. El archivo se procesa <b>en tu navegador</b>; no se guarda en la plataforma ni en el Google Sheet.</span>
+</div>
+
+<details class="settings" id="materialesEditorWrap" hidden style="margin-bottom:16px">
+  <summary id="materialesEditorSummary">📋 Materiales detectados (0)</summary>
+  <div class="methodology-body" style="padding-top:8px">Se incluyen automáticamente las pestañas del Excel que tienen columnas de Promotor, Fecha e "¿Se implementó?". Si alguna hoja no es un material real (p. ej. un padrón o una hoja de trabajo), desmárcala aquí.</div>
+  <div class="ms-panel" id="materialesEditorPanel" style="position:static; max-height:260px; margin-top:8px"></div>
+</details>
+
+<div class="filter-bar" id="filterBar">
+  <div class="filter-field">
+    <label>Cadena</label>
+    <div class="ms">
+      <button type="button" class="ms-btn" id="cadenaBtn" disabled><span id="cadenaBtnLabel">Todas las cadenas</span><span class="caret">▾</span></button>
+      <div class="ms-panel" id="cadenaPanel" hidden></div>
+    </div>
+  </div>
+  <div class="filter-field">
+    <label>Material</label>
+    <div class="ms">
+      <button type="button" class="ms-btn" id="materialBtn" disabled><span id="materialBtnLabel">Todos los materiales</span><span class="caret">▾</span></button>
+      <div class="ms-panel" id="materialPanel" hidden></div>
+    </div>
+  </div>
+  <div class="filter-field">
+    <label for="filterPromotor">Promotor</label>
+    <select id="filterPromotor" disabled><option value="ALL">Todos los promotores</option></select>
+  </div>
+  <div class="filter-field">
+    <label for="filtDesde">Desde</label>
+    <input type="date" id="filtDesde" disabled>
+  </div>
+  <div class="filter-field">
+    <label for="filtHasta">Hasta</label>
+    <input type="date" id="filtHasta" disabled>
+  </div>
+</div>
+<p class="filter-hint">El rango de fechas aplica sobre la fecha registrada en cada pestaña de material (última fecha de chequeo). Los demás filtros aplican a todas las tablas.</p>
+
+<div class="kpi-strip" id="kpiStrip"></div>
+
+<section class="tables" id="tablesSection" hidden>
+  <div class="table-block">
+    <div class="table-head">
+      <h2>🏪 % Implementado por cadena y material <span class="count-pill chip" id="pivotCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
+      <span class="desc">Filas: cadena · columnas: material. En cada celda: % implementado y debajo el desglose Sí/No. Colores según los umbrales configurados arriba.</span>
+    </div>
+    <div class="table-scroll">
+      <table id="tableCadenaMaterial" class="matrix-table">
+        <thead><tr id="cmHeadRow"><th class="sticky-col">Cadena</th></tr></thead>
+        <tbody id="cmBody"></tbody>
+        <tfoot id="cmFoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <div class="table-block">
+    <div class="table-head">
+      <h2>🧑‍💼 Resumen por promotor <span class="count-pill chip" id="promoCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
+      <input class="search-box" id="searchPromo" placeholder="Buscar promotor o cadena…" />
+      <span class="desc">Un resumen por promotor, sumando todos los materiales y tiendas que le aparecen en el filtro actual. Clic en un encabezado para ordenar.</span>
+    </div>
+    <div class="table-scroll">
+      <table id="tablePromotorResumen">
+        <thead><tr>
+          <th data-key="promotor" data-type="text">Promotor</th>
+          <th data-key="cadenas" data-type="text">Cadena(s)</th>
+          <th class="num" data-key="nMateriales" data-type="num">Materiales</th>
+          <th class="num" data-key="nEval" data-type="num">Tienda×material evaluados</th>
+          <th class="num" data-key="nSi" data-type="num">Implementados</th>
+          <th class="num" data-key="nNo" data-type="num">Pendientes</th>
+          <th class="num" data-key="pct" data-type="num">% Implementado</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="table-block">
+    <div class="table-head">
+      <h2>📋 Detalle por tienda y material <span class="count-pill chip" id="detCount" style="background:var(--accent-soft);color:var(--accent)">0</span></h2>
+      <input class="search-box" id="searchDet" placeholder="Buscar tienda, código, promotor…" />
+      <span class="desc">Clic en un encabezado para ordenar. Por rendimiento se muestran como máximo 1000 filas: afina los filtros arriba para ver un subconjunto más específico.</span>
+    </div>
+    <div class="table-scroll">
+      <table id="tableDetalle">
+        <thead><tr>
+          <th data-key="cadena" data-type="text">Cadena</th>
+          <th data-key="material" data-type="text">Material</th>
+          <th data-key="codigo" data-type="text">Código</th>
+          <th data-key="estacion" data-type="text">Estación</th>
+          <th data-key="promotor" data-type="text">Promotor</th>
+          <th data-key="diaVisita" data-type="text">Día visita</th>
+          <th data-key="frecuencia" data-type="text">Frecuencia</th>
+          <th data-key="fecha" data-type="date">Fecha</th>
+          <th data-key="visitadoTxt" data-type="text">¿Visitó?</th>
+          <th data-key="implementadoTxt" data-type="text">¿Implementó?</th>
+          <th data-key="link" data-type="text">Evidencia</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="truncate-note" id="detTruncNote" hidden></div>
+  </div>
+</section>
+
+<footer class="meta">
+  <details class="methodology">
+    <summary>ℹ️ Cómo se calcula esto</summary>
+    <div class="methodology-body">
+      <p>Cada pestaña del Excel representa un <strong>material</strong> (p. ej. Boost, Table Tent, Menuboard, Cenefa, QR, Conectados…). Una pestaña se detecta como material cuando tiene columnas de <code>PROMOTOR</code>, <code>FECHA</code> y <code>¿SE IMPLEMENTÓ?</code> (con o sin fila de título arriba del encabezado). Hojas de apoyo del mismo archivo (padrón, pendientes, listados crudos, hojas de trabajo) no tienen esa combinación de columnas y se excluyen automáticamente; aun así puedes revisar y ajustar la lista en "📋 Materiales detectados".</p>
+      <p><strong>% Implementado</strong> = filas con "¿Se implementó?" = SI, dividido entre filas con SI o NO (las filas sin dato se ignoran en el %, pero sí cuentan como "evaluadas" en los KPIs de conteo).</p>
+      <p>El <strong>filtro de fecha</strong> (Desde/Hasta) aplica sobre la columna FECHA de cada pestaña, que normalmente es la fecha del último chequeo de ese material en esa tienda — no es necesariamente la misma fecha entre materiales distintos para la misma tienda.</p>
+      <p>La columna <strong>Evidencia</strong> del detalle muestra el link a la foto/sustento cuando la pestaña lo trae.</p>
+      <p>Este visor no reemplaza el Excel fuente — para el detalle completo pídeselo a Claude o revisa el archivo original en SharePoint.</p>
+    </div>
+  </details>
+</footer>
+
+<!-- Microsoft Authentication Library (para leer el Excel en vivo desde SharePoint) -->
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
+<script>
+/* ═══════ CONFIG conexión en vivo con SharePoint (Microsoft Graph) ═══════
+   Reutiliza la misma app "bat360" registrada en Entra que usa radar.html.
+   IMPORTANTE: para que el login en vivo funcione desde esta página hay que
+   agregar "https://bat360.vercel.app/materiales.html" como Redirect URI (SPA)
+   en Entra ID → App registrations → bat360 → Authentication, igual que ya
+   está agregado "https://bat360.vercel.app/radar.html". Mientras tanto, la
+   carga manual del archivo .xlsx funciona sin ningún cambio. */
+window.MAT_MS = {
+  clientId: "dea7ddf0-2d41-4e5d-9971-3e37d163948c",
+  tenant:   "9d85a34e-57e5-4f82-9341-7dd9300077b7",
+  scopes:   ["Files.Read.All"],
+  shareUrl: "https://ttauditperu-my.sharepoint.com/:x:/g/personal/acastro_ttauditperu_onmicrosoft_com/IQD8tvN_gVaxTKxd2ryDcvD2AdjtLH088HLIwdebgECDGu0?e=btunM7"
+};
+</script>
+<script>
+(function(){
+  "use strict";
+
+  function norm(s){
+    if(s===null||s===undefined) return "";
+    return String(s).normalize("NFD").replace(/[̀-ͯ]/g,"")
+      .replace(/[^\p{L}\p{N}\s]/gu,"").toUpperCase().trim().replace(/\s+/g," ");
+  }
+  function esc(s){
+    return String(s===null||s===undefined?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  function fmtDate(d){
+    if(!(d instanceof Date) || isNaN(d)) return "—";
+    try{ return new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short",year:"numeric"}).format(d); }
+    catch(e){ return d.toISOString().slice(0,10); }
+  }
+  function dayKeyOf(date){
+    var x = new Date(date.getTime()); x.setHours(0,0,0,0);
+    return x.toISOString().slice(0,10);
+  }
+
+  // ═══════ Detección de hojas de material ═══════
+  var RULES = {
+    cadena:       function(h){ return h==="KACC" || h==="CADENA"; },
+    codigo:       function(h){ return h.indexOf("CODIGO")===0; },
+    estacion:     function(h){ return h.indexOf("ESTACION")===0; },
+    promotor:     function(h){ return h.indexOf("PROMOTOR")===0; },
+    zona:         function(h){ return (h.indexOf("LIMA")!==-1 && h.indexOf("KC")!==-1) || h==="ZONA" || h.indexOf("REGION")===0; },
+    pareto:       function(h){ return h.indexOf("PARETO")===0; },
+    frecuencia:   function(h){ return h.indexOf("FRECUENCIA")===0; },
+    diaVisita:    function(h){ return h.indexOf("DIA")!==-1 && h.indexOf("VISITA")!==-1; },
+    fecha:        function(h){ return h==="FECHA"; },
+    visitado:     function(h){ return h.indexOf("VISITO")!==-1; },
+    implementado: function(h){ return h.indexOf("IMPLEMENT")!==-1; },
+    link:         function(h){ return h.indexOf("LINK")!==-1 || h.indexOf("FOTO")!==-1 || h.indexOf("EVIDENCIA")!==-1; }
+  };
+
+  function mapHeaders(headerRow){
+    var normed = (headerRow||[]).map(norm);
+    var used = {};
+    var map = {};
+    Object.keys(RULES).forEach(function(key){
+      var idx = -1;
+      for(var i=0;i<normed.length;i++){
+        if(used[i]) continue;
+        if(RULES[key](normed[i])){ idx = i; break; }
+      }
+      if(idx !== -1) used[idx] = true;
+      map[key] = idx;
+    });
+    return map;
+  }
+
+  function detectHeaderRow(rows){
+    var best = null;
+    var limit = Math.min(rows.length, 6);
+    for(var ri=0; ri<limit; ri++){
+      var map = mapHeaders(rows[ri]);
+      var score = ["promotor","fecha","implementado","codigo","estacion"].filter(function(k){ return map[k]!==-1; }).length;
+      if(map.promotor!==-1 && map.fecha!==-1 && map.implementado!==-1 && (!best || score>best.score)){
+        best = {idx:ri, map:map, score:score};
+      }
+    }
+    return best;
+  }
+
+  function parseWorkbook(wb){
+    var materials = [];
+    var records = [];
+    wb.SheetNames.forEach(function(sn){
+      var rows;
+      try{ rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], {header:1, blankrows:false, defval:"", raw:true}); }
+      catch(e){ return; }
+      if(!rows || !rows.length) return;
+      var det = detectHeaderRow(rows);
+      if(!det) return;
+      var map = det.map;
+      var cnt = 0;
+      for(var i=det.idx+1; i<rows.length; i++){
+        var r = rows[i]; if(!r) continue;
+        var codigo = map.codigo!==-1 ? r[map.codigo] : "";
+        var estacion = map.estacion!==-1 ? r[map.estacion] : "";
+        if((codigo===""||codigo===undefined||codigo===null) && (estacion===""||estacion===undefined||estacion===null)) continue;
+        var fechaRaw = map.fecha!==-1 ? r[map.fecha] : null;
+        var fecha = fechaRaw instanceof Date ? fechaRaw : null;
+        var visitadoN = map.visitado!==-1 ? norm(r[map.visitado]) : "";
+        var implementadoN = map.implementado!==-1 ? norm(r[map.implementado]) : "";
+        records.push({
+          material: sn,
+          cadena: (map.cadena!==-1 ? String(r[map.cadena]||"").trim() : "") || "(SIN CADENA)",
+          codigo: String(codigo||""),
+          estacion: String(estacion||""),
+          promotor: (map.promotor!==-1 ? String(r[map.promotor]||"").trim() : "") || "(SIN PROMOTOR)",
+          zona: map.zona!==-1 ? String(r[map.zona]||"") : "",
+          pareto: map.pareto!==-1 ? String(r[map.pareto]||"") : "",
+          frecuencia: map.frecuencia!==-1 ? String(r[map.frecuencia]||"") : "",
+          diaVisita: map.diaVisita!==-1 ? String(r[map.diaVisita]||"") : "",
+          fecha: fecha,
+          visitado: visitadoN==="SI" ? true : (visitadoN==="NO" ? false : null),
+          implementado: implementadoN==="SI" ? true : (implementadoN==="NO" ? false : null),
+          link: map.link!==-1 ? String(r[map.link]||"") : ""
+        });
+        cnt++;
+      }
+      if(cnt>0) materials.push({name:sn, count:cnt});
+    });
+    if(!materials.length) return {records:[], materials:[], error:"No se detectó ninguna pestaña con formato de material (columnas de Promotor, Fecha y ¿Se implementó?). Verifica que sea el archivo correcto."};
+    return {records:records, materials:materials};
+  }
+
+  // ═══════ Estado ═══════
+  var state = {
+    allRecords: [],
+    materials: [],       // [{name, count}]
+    materialExcluded: {}, // name -> true si el usuario lo desmarcó en el editor
+    cadenaSel: [],        // vacío = todas
+    materialSel: [],      // vacío = todas (dentro de las no excluidas)
+    loaded: false
+  };
+  var cfg = {green:90, red:70};
+  var sortState = {};
+
+  function loadCfg(){
+    try{
+      var raw = localStorage.getItem("mat_cfg");
+      if(raw){ var c = JSON.parse(raw); if(c.green) cfg.green=c.green; if(c.red) cfg.red=c.red; }
+    }catch(e){}
+    document.getElementById("cfgGreen").value = cfg.green;
+    document.getElementById("cfgRed").value = cfg.red;
+  }
+  function saveCfg(){ try{ localStorage.setItem("mat_cfg", JSON.stringify(cfg)); }catch(e){} }
+  function readCfg(){
+    cfg.green = Math.min(100, Math.max(0, parseInt(document.getElementById("cfgGreen").value,10) || 90));
+    cfg.red = Math.min(100, Math.max(0, parseInt(document.getElementById("cfgRed").value,10) || 70));
+    saveCfg();
+  }
+  function pctChipClass(pct){
+    if(pct===null||pct===undefined||isNaN(pct)) return "";
+    if(pct>=cfg.green) return "ok";
+    if(pct>=cfg.red) return "warn";
+    return "crit";
+  }
+
+  // ═══════ Carga de archivo ═══════
+  function onFileLoaded(parsed){
+    state.allRecords = parsed.records;
+    state.materials = parsed.materials;
+    state.materialExcluded = {};
+    state.cadenaSel = [];
+    state.materialSel = [];
+    state.loaded = true;
+    document.getElementById("emptyBanner").hidden = true;
+    document.getElementById("tablesSection").hidden = false;
+    document.getElementById("materialesEditorWrap").hidden = false;
+    renderMaterialesEditor();
+    populateFilterOptions();
+    applyFiltersAndRender();
+  }
+
+  function activeMaterials(){
+    return state.materials.filter(function(m){ return !state.materialExcluded[m.name]; }).map(function(m){ return m.name; });
+  }
+
+  function renderMaterialesEditor(){
+    var panel = document.getElementById("materialesEditorPanel");
+    var summary = document.getElementById("materialesEditorSummary");
+    summary.textContent = "📋 Materiales detectados (" + state.materials.length + ")";
+    panel.innerHTML = state.materials.map(function(m){
+      var checked = !state.materialExcluded[m.name];
+      return '<label><input type="checkbox" class="matEdChk" value="'+esc(m.name)+'" '+(checked?"checked":"")+'> '+esc(m.name)+' <span class="mono" style="color:var(--text-muted);margin-left:auto">'+m.count.toLocaleString("es-PE")+'</span></label>';
+    }).join("");
+    Array.prototype.forEach.call(panel.querySelectorAll(".matEdChk"), function(chk){
+      chk.addEventListener("change", function(){
+        state.materialExcluded[chk.value] = !chk.checked;
+        populateFilterOptions();
+        applyFiltersAndRender();
+      });
+    });
+  }
+
+  // ═══════ Filtros ═══════
+  function buildMsPanel(panelId, btnLabelId, keys, labelOf, selArr, onChange){
+    var panel = document.getElementById(panelId);
+    var allChecked = selArr.length===0;
+    var html = '<label><input type="checkbox" class="allChk"'+(allChecked?" checked":"")+'> <b>Todas</b></label><div class="ms-sep"></div>';
+    html += keys.map(function(k){
+      var checked = !allChecked && selArr.indexOf(k)!==-1;
+      return '<label><input type="checkbox" class="itemChk" value="'+esc(k)+'" '+(checked?"checked":"")+'> '+esc(labelOf(k))+'</label>';
+    }).join("");
+    panel.innerHTML = html;
+    panel.querySelector(".allChk").addEventListener("change", function(){ onChange([]); });
+    Array.prototype.forEach.call(panel.querySelectorAll(".itemChk"), function(chk){
+      chk.addEventListener("change", function(){
+        var chosen = Array.prototype.filter.call(panel.querySelectorAll(".itemChk"), function(c){ return c.checked; }).map(function(c){ return c.value; });
+        onChange((chosen.length===0 || chosen.length===keys.length) ? [] : chosen);
+      });
+    });
+    document.getElementById(btnLabelId).textContent = allChecked ? "Todas ("+keys.length+")" : (selArr.length===1 ? selArr[0] : selArr.length+" de "+keys.length);
+  }
+
+  function populateFilterOptions(){
+    var mats = activeMaterials();
+    var base = state.allRecords.filter(function(r){ return mats.indexOf(r.material)!==-1; });
+
+    var cadenaBtn = document.getElementById("cadenaBtn");
+    var materialBtn = document.getElementById("materialBtn");
+    var promoSel = document.getElementById("filterPromotor");
+    var desdeEl = document.getElementById("filtDesde"), hastaEl = document.getElementById("filtHasta");
+
+    if(!base.length){
+      cadenaBtn.disabled = true; materialBtn.disabled = true; promoSel.disabled = true;
+      desdeEl.disabled = true; hastaEl.disabled = true;
+      return;
+    }
+    cadenaBtn.disabled = false; materialBtn.disabled = false; promoSel.disabled = false;
+    desdeEl.disabled = false; hastaEl.disabled = false;
+
+    var cadenaSet = {}; base.forEach(function(r){ cadenaSet[r.cadena]=true; });
+    var cadenas = Object.keys(cadenaSet).sort();
+    state.cadenaSel = state.cadenaSel.filter(function(c){ return cadenas.indexOf(c)!==-1; });
+    buildMsPanel("cadenaPanel","cadenaBtnLabel", cadenas, function(k){return k;}, state.cadenaSel, function(sel){
+      state.cadenaSel = sel; populateFilterOptions(); applyFiltersAndRender();
+    });
+
+    state.materialSel = state.materialSel.filter(function(m){ return mats.indexOf(m)!==-1; });
+    buildMsPanel("materialPanel","materialBtnLabel", mats.slice().sort(), function(k){return k;}, state.materialSel, function(sel){
+      state.materialSel = sel; populateFilterOptions(); applyFiltersAndRender();
+    });
+
+    var promoSet = {}; base.forEach(function(r){ promoSet[r.promotor]=true; });
+    var promos = Object.keys(promoSet).sort();
+    var currentPromo = promoSel.value || "ALL";
+    promoSel.innerHTML = '<option value="ALL">Todos los promotores ('+promos.length+')</option>' +
+      promos.map(function(p){ return '<option value="'+esc(p)+'">'+esc(p)+'</option>'; }).join("");
+    promoSel.value = promos.indexOf(currentPromo)!==-1 ? currentPromo : "ALL";
+
+    var dated = base.filter(function(r){ return r.fecha; });
+    if(dated.length){
+      var min = dated[0].fecha, max = dated[0].fecha;
+      dated.forEach(function(r){ if(r.fecha<min) min=r.fecha; if(r.fecha>max) max=r.fecha; });
+      desdeEl.min = hastaEl.min = dayKeyOf(min);
+      desdeEl.max = hastaEl.max = dayKeyOf(max);
+      if(!desdeEl.value) desdeEl.value = dayKeyOf(min);
+      if(!hastaEl.value) hastaEl.value = dayKeyOf(max);
+    }
+  }
+
+  function currentFiltered(){
+    var mats = activeMaterials();
+    var matSel = state.materialSel.length ? state.materialSel : mats;
+    var cadSel = state.cadenaSel;
+    var promoFilter = document.getElementById("filterPromotor").value;
+    var desde = document.getElementById("filtDesde").value;
+    var hasta = document.getElementById("filtHasta").value;
+    return state.allRecords.filter(function(r){
+      if(mats.indexOf(r.material)===-1) return false;
+      if(matSel.indexOf(r.material)===-1) return false;
+      if(cadSel.length && cadSel.indexOf(r.cadena)===-1) return false;
+      if(promoFilter!=="ALL" && r.promotor!==promoFilter) return false;
+      if(r.fecha){
+        var k = dayKeyOf(r.fecha);
+        if(desde && k<desde) return false;
+        if(hasta && k>hasta) return false;
+      }
+      return true;
+    });
+  }
+
+  // ═══════ Render ═══════
+  function renderKpis(rows){
+    var si = rows.filter(function(r){ return r.implementado===true; }).length;
+    var no = rows.filter(function(r){ return r.implementado===false; }).length;
+    var pct = (si+no) ? (si/(si+no)*100) : null;
+    var mats = {}; rows.forEach(function(r){ mats[r.material]=true; });
+    var cards = [
+      ["Materiales en el filtro", Object.keys(mats).length, ""],
+      ["Tienda × material evaluados", rows.length.toLocaleString("es-PE"), ""],
+      ["% Implementado", pct===null?"—":pct.toFixed(1)+"%", si.toLocaleString("es-PE")+" implementados"],
+      ["Pendientes (NO)", no.toLocaleString("es-PE"), ""]
+    ];
+    document.getElementById("kpiStrip").innerHTML = cards.map(function(c){
+      return '<div class="kpi-card"><span class="label">'+esc(c[0])+'</span><span class="value">'+esc(c[1])+'</span><span class="sub">'+esc(c[2])+'</span></div>';
+    }).join("");
+  }
+
+  function renderCadenaMaterial(rows){
+    var cadenas = {}, materiales = {};
+    rows.forEach(function(r){ cadenas[r.cadena]=true; materiales[r.material]=true; });
+    var cadList = Object.keys(cadenas).sort();
+    var matList = Object.keys(materiales).sort();
+    document.getElementById("pivotCount").textContent = cadList.length + " × " + matList.length;
+
+    var headRow = document.getElementById("cmHeadRow");
+    headRow.innerHTML = '<th class="sticky-col">Cadena</th>' + matList.map(function(m){ return '<th>'+esc(m)+'</th>'; }).join("") + '<th class="matrix-total-col">Total</th>';
+
+    function cellStats(filterFn){
+      var si=0,no=0; rows.forEach(function(r){ if(filterFn(r)){ if(r.implementado===true) si++; else if(r.implementado===false) no++; } });
+      return {si:si,no:no,total:si+no,pct: (si+no)?(si/(si+no)*100):null};
+    }
+    function cellHtml(st){
+      if(st.total===0) return '<td class="matrix-cell empty">·</td>';
+      return '<td class="matrix-cell '+pctChipClass(st.pct)+'" title="'+st.si+' SI / '+st.no+' NO">'+
+        '<div class="mc-total">'+st.pct.toFixed(0)+'%</div>'+
+        '<div class="mc-split"><span class="ok">'+st.si+'</span>/<span class="crit">'+st.no+'</span></div></td>';
+    }
+
+    var tbody = document.getElementById("cmBody");
+    tbody.innerHTML = cadList.length ? cadList.map(function(cad){
+      var cells = matList.map(function(mat){ return cellHtml(cellStats(function(r){ return r.cadena===cad && r.material===mat; })); }).join("");
+      var rowTotal = cellStats(function(r){ return r.cadena===cad; });
+      return '<tr><td class="sticky-col">'+esc(cad)+'</td>'+cells+'<td class="matrix-cell matrix-total-col '+pctChipClass(rowTotal.pct)+'">'+
+        (rowTotal.total? '<div class="mc-total">'+rowTotal.pct.toFixed(0)+'%</div><div class="mc-split"><span class="ok">'+rowTotal.si+'</span>/<span class="crit">'+rowTotal.no+'</span></div>' : '<span class="matrix-cell empty">·</span>')+
+      '</td></tr>';
+    }).join("") : '<tr><td colspan="'+(matList.length+2)+'" style="color:var(--text-muted)">Sin datos para este filtro.</td></tr>';
+
+    var footCells = matList.map(function(mat){ return cellHtml(cellStats(function(r){ return r.material===mat; })); }).join("");
+    var grand = cellStats(function(){ return true; });
+    document.getElementById("cmFoot").innerHTML = cadList.length ? ('<tr><td class="sticky-col">Total</td>'+footCells+
+      '<td class="matrix-cell matrix-total-col">'+(grand.total? '<div class="mc-total">'+grand.pct.toFixed(0)+'%</div><div class="mc-split"><span class="ok">'+grand.si+'</span>/<span class="crit">'+grand.no+'</span></div>' : '·')+'</td></tr>') : "";
+  }
+
+  function renderPromotorResumen(rows){
+    var byP = {};
+    rows.forEach(function(r){
+      var p = byP[r.promotor] = byP[r.promotor] || {promotor:r.promotor, cadenas:{}, materiales:{}, nEval:0, nSi:0, nNo:0};
+      p.cadenas[r.cadena]=true; p.materiales[r.material]=true; p.nEval++;
+      if(r.implementado===true) p.nSi++; else if(r.implementado===false) p.nNo++;
+    });
+    var list = Object.keys(byP).map(function(k){
+      var p = byP[k];
+      return {
+        promotor:p.promotor, cadenas:Object.keys(p.cadenas).sort().join(", "),
+        nMateriales:Object.keys(p.materiales).length, nEval:p.nEval, nSi:p.nSi, nNo:p.nNo,
+        pct: (p.nSi+p.nNo) ? (p.nSi/(p.nSi+p.nNo)*100) : null
+      };
+    });
+    document.getElementById("promoCount").textContent = list.length;
+    var q = norm(document.getElementById("searchPromo").value);
+    var filtered = list.filter(function(p){ return !q || norm(p.promotor).indexOf(q)!==-1 || norm(p.cadenas).indexOf(q)!==-1; });
+    filtered = applySort(filtered, "tablePromotorResumen");
+    var tbody = document.querySelector("#tablePromotorResumen tbody");
+    tbody.innerHTML = filtered.length ? filtered.map(function(p){
+      var cls = p.pct!==null && p.pct<cfg.red ? "row-crit" : (p.pct!==null && p.pct<cfg.green ? "row-warn" : "");
+      return '<tr class="'+cls+'">'+
+        '<td class="nowrap">'+esc(p.promotor)+'</td>'+
+        '<td class="nowrap">'+esc(p.cadenas)+'</td>'+
+        '<td class="num">'+p.nMateriales+'</td>'+
+        '<td class="num">'+p.nEval+'</td>'+
+        '<td class="num">'+p.nSi+'</td>'+
+        '<td class="num">'+p.nNo+'</td>'+
+        '<td class="num">'+(p.pct===null?"—":'<span class="chip '+pctChipClass(p.pct)+'">'+p.pct.toFixed(1)+'%</span>')+'</td>'+
+      '</tr>';
+    }).join("") : '<tr><td colspan="7" style="color:var(--text-muted)">Sin resultados.</td></tr>';
+  }
+
+  function renderDetalle(rows){
+    document.getElementById("detCount").textContent = rows.length;
+    var q = norm(document.getElementById("searchDet").value);
+    var filtered = rows.filter(function(r){
+      return !q || norm(r.estacion).indexOf(q)!==-1 || norm(r.codigo).indexOf(q)!==-1 || norm(r.promotor).indexOf(q)!==-1 || norm(r.material).indexOf(q)!==-1 || norm(r.cadena).indexOf(q)!==-1;
+    }).map(function(r){
+      return Object.assign({}, r, {
+        visitadoTxt: r.visitado===true?"SI":(r.visitado===false?"NO":"—"),
+        implementadoTxt: r.implementado===true?"SI":(r.implementado===false?"NO":"—")
+      });
+    });
+    filtered.sort(function(a,b){ return (b.fecha?b.fecha.getTime():0) - (a.fecha?a.fecha.getTime():0); });
+    filtered = applySort(filtered, "tableDetalle");
+    var trunc = filtered.length>1000;
+    var shown = filtered.slice(0,1000);
+    var tbody = document.querySelector("#tableDetalle tbody");
+    tbody.innerHTML = shown.length ? shown.map(function(r){
+      var cls = r.implementado===false ? "row-crit" : "";
+      var linkHtml = r.link && /^https?:\/\//i.test(r.link) ? '<a href="'+esc(r.link)+'" target="_blank" rel="noopener">🔗 Ver</a>' : (r.link ? esc(r.link) : "—");
+      return '<tr class="'+cls+'">'+
+        '<td class="nowrap">'+esc(r.cadena)+'</td>'+
+        '<td class="nowrap">'+esc(r.material)+'</td>'+
+        '<td class="nowrap">'+esc(r.codigo)+'</td>'+
+        '<td class="nowrap">'+esc(r.estacion)+'</td>'+
+        '<td class="nowrap">'+esc(r.promotor)+'</td>'+
+        '<td class="nowrap">'+(esc(r.diaVisita)||"—")+'</td>'+
+        '<td class="nowrap">'+(esc(r.frecuencia)||"—")+'</td>'+
+        '<td class="nowrap">'+fmtDate(r.fecha)+'</td>'+
+        '<td class="nowrap">'+esc(r.visitadoTxt)+'</td>'+
+        '<td class="nowrap">'+esc(r.implementadoTxt)+'</td>'+
+        '<td class="nowrap">'+linkHtml+'</td>'+
+      '</tr>';
+    }).join("") : '<tr><td colspan="11" style="color:var(--text-muted)">Sin resultados.</td></tr>';
+    var note = document.getElementById("detTruncNote");
+    note.hidden = !trunc;
+    if(trunc) note.textContent = "Mostrando 1000 de " + filtered.length.toLocaleString("es-PE") + " filas. Afina los filtros arriba para ver el resto.";
+  }
+
+  function applyFiltersAndRender(){
+    var rows = state.loaded ? currentFiltered() : [];
+    renderKpis(rows);
+    renderCadenaMaterial(rows);
+    renderPromotorResumen(rows);
+    renderDetalle(rows);
+  }
+
+  // ═══════ tablas ordenables ═══════
+  function applySort(rows, tableId){
+    var s = sortState[tableId]; if(!s) return rows;
+    var out = rows.slice();
+    out.sort(function(a,b){
+      var av=a[s.key], bv=b[s.key];
+      if(s.type==="date"){ av = av instanceof Date ? av.getTime() : -Infinity; bv = bv instanceof Date ? bv.getTime() : -Infinity; }
+      else if(s.type==="num"){ av = (av===null||av===undefined||isNaN(av))? -Infinity : Number(av); bv = (bv===null||bv===undefined||isNaN(bv))? -Infinity : Number(bv); }
+      else { av = norm(av); bv = norm(bv); }
+      if(av<bv) return -1*s.dir; if(av>bv) return 1*s.dir; return 0;
+    });
+    return out;
+  }
+  function updateSortIndicators(tableId){
+    var s = sortState[tableId];
+    document.querySelectorAll("#"+tableId+" thead th[data-key]").forEach(function(th){
+      var base = th.textContent.replace(/[▲▼]/g,"").trim();
+      th.innerHTML = base + (s && th.dataset.key===s.key ? '<span class="arr">'+(s.dir>0?"▲":"▼")+'</span>' : "");
+    });
+  }
+  function rerender(tableId){
+    var rows = state.loaded ? currentFiltered() : [];
+    if(tableId==="tablePromotorResumen") renderPromotorResumen(rows);
+    else if(tableId==="tableDetalle") renderDetalle(rows);
+  }
+  function initSortable(tableId){
+    var thead = document.querySelector("#"+tableId+" thead");
+    if(!thead) return;
+    thead.addEventListener("click", function(e){
+      var th = e.target.closest("th"); if(!th || !th.dataset.key) return;
+      var s = sortState[tableId];
+      if(s && s.key===th.dataset.key){ s.dir = -s.dir; }
+      else { s = {key:th.dataset.key, type:(th.dataset.type||"text"), dir:(th.dataset.type==="text"?1:-1)}; }
+      sortState[tableId] = s;
+      updateSortIndicators(tableId);
+      rerender(tableId);
+    });
+  }
+  initSortable("tablePromotorResumen"); initSortable("tableDetalle");
+
+  document.getElementById("searchPromo").addEventListener("input", function(){ rerender("tablePromotorResumen"); });
+  document.getElementById("searchDet").addEventListener("input", function(){ rerender("tableDetalle"); });
+  document.getElementById("filterPromotor").addEventListener("change", applyFiltersAndRender);
+  document.getElementById("filtDesde").addEventListener("change", applyFiltersAndRender);
+  document.getElementById("filtHasta").addEventListener("change", applyFiltersAndRender);
+  ["cfgGreen","cfgRed"].forEach(function(id){
+    document.getElementById(id).addEventListener("change", function(){ readCfg(); if(state.loaded) applyFiltersAndRender(); });
+  });
+
+  ["cadena","material"].forEach(function(k){
+    var btn = document.getElementById(k+"Btn"), panel = document.getElementById(k+"Panel");
+    btn.addEventListener("click", function(e){ e.stopPropagation(); if(btn.disabled) return; panel.hidden = !panel.hidden; });
+    document.addEventListener("click", function(e){
+      if(!panel.hidden && !panel.contains(e.target) && !btn.contains(e.target)) panel.hidden = true;
+    });
+  });
+
+  document.getElementById("fileInput").addEventListener("change", function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    var statusEl = document.getElementById("statusLine");
+    document.getElementById("fileName").textContent = file.name;
+    statusEl.textContent = "Leyendo archivo…"; statusEl.className = "status-line";
+    file.arrayBuffer().then(function(buf){
+      var wb = XLSX.read(buf, {type:"array", cellDates:true});
+      var parsed = parseWorkbook(wb);
+      if(parsed.error){ statusEl.textContent = "⚠ " + parsed.error; statusEl.className = "status-line err"; return; }
+      onFileLoaded(parsed);
+      statusEl.textContent = "✓ " + parsed.materials.length + " materiales · " + parsed.records.length.toLocaleString("es-PE") + " filas cargadas";
+      statusEl.className = "status-line ok";
+    }).catch(function(err){
+      statusEl.textContent = "⚠ No se pudo leer el archivo: " + err.message; statusEl.className = "status-line err";
+    });
+  });
+
+  // ═══════ Conexión en vivo con SharePoint (Microsoft Graph + MSAL) ═══════
+  var MS = window.MAT_MS || {};
+  var msalApp = null;
+  var msInFlight = false;
+
+  function b64url(str){ return btoa(unescape(encodeURIComponent(str))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
+  function graphShareId(url){ return "u!" + b64url(url); }
+
+  function msToken(interactive){
+    var req = { scopes: MS.scopes || ["Files.Read.All"] };
+    var acc = msalApp.getAllAccounts()[0];
+    if(acc){
+      req.account = acc;
+      return msalApp.acquireTokenSilent(req).then(function(r){ return r.accessToken; })
+        .catch(function(){
+          if(!interactive) return Promise.reject(new Error("silent-failed"));
+          return msalApp.acquireTokenPopup(req).then(function(r){ return r.accessToken; });
+        });
+    }
+    if(!interactive) return Promise.reject(new Error("no-account"));
+    return msalApp.loginPopup(req).then(function(r){
+      if(r.account) document.getElementById("msUser").textContent = r.account.username;
+      return r.accessToken;
+    });
+  }
+
+  function loadFromSharePoint(silent){
+    var status = document.getElementById("statusLine");
+    if(!MS.shareUrl){ status.textContent = "⚠ Falta la URL del archivo de SharePoint en la config."; status.className = "status-line err"; return; }
+    if(msInFlight) return;
+    msInFlight = true;
+    if(!silent){ status.textContent = "Conectando con SharePoint…"; status.className = "status-line"; }
+    msToken(!silent).then(function(token){
+      var url = "https://graph.microsoft.com/v1.0/shares/" + graphShareId(MS.shareUrl) + "/driveItem/content";
+      return fetch(url, { headers: { Authorization: "Bearer " + token } });
+    }).then(function(res){
+      if(!res.ok) throw new Error("Graph HTTP " + res.status);
+      return res.arrayBuffer();
+    }).then(function(buf){
+      var wb = XLSX.read(buf, { type:"array", cellDates:true });
+      var parsed = parseWorkbook(wb);
+      if(parsed.error) throw new Error(parsed.error);
+      document.getElementById("fileName").textContent = "SharePoint · en vivo";
+      onFileLoaded(parsed);
+      var mr = document.getElementById("msRefreshBtn"); if(mr) mr.hidden = false;
+      status.textContent = "✓ " + parsed.materials.length + " materiales · " + parsed.records.length.toLocaleString("es-PE") + " filas desde SharePoint";
+      status.className = "status-line ok";
+    }).catch(function(err){
+      var msg = (err && err.message) || String(err);
+      if(silent && (msg==="no-account" || msg==="silent-failed")) return;
+      if(msg.indexOf("interaction_in_progress")!==-1){
+        status.textContent = "⚠ Login en curso o interrumpido. Recarga la página (F5) e intenta de nuevo.";
+      } else if(msg.indexOf("popup_window_error")!==-1 || msg.indexOf("BrowserAuthError: popup")!==-1){
+        status.textContent = "⚠ El navegador bloqueó la ventana de inicio de sesión. Permite ventanas emergentes para bat360.vercel.app e intenta otra vez.";
+      } else if(msg.indexOf("AADSTS50011")!==-1 || msg.indexOf("redirect_uri_mismatch")!==-1){
+        status.textContent = "⚠ Falta registrar esta página como Redirect URI en Entra (bat360 → Authentication → agregar .../materiales.html). Mientras tanto usa la carga manual.";
+      } else if(msg.indexOf("Graph HTTP 403")!==-1){
+        status.textContent = "⚠ Tu cuenta inició sesión, pero no tiene acceso a este archivo (error 403). Pide a quien lo comparte que te agregue como destinatario, o usa la carga manual.";
+      } else if(msg.indexOf("Graph HTTP 404")!==-1){
+        status.textContent = "⚠ No se encontró el archivo compartido (error 404). El link puede haber cambiado — pide un link nuevo.";
+      } else {
+        status.textContent = "⚠ No se pudo cargar desde SharePoint: " + msg;
+      }
+      status.className = "status-line err";
+    }).finally(function(){ msInFlight = false; });
+  }
+
+  function initMs(){
+    var row = document.getElementById("msRow");
+    var note = document.getElementById("msNote");
+    if(!MS.clientId || typeof msal === "undefined"){
+      if(row) row.hidden = true;
+      if(note) note.hidden = true;
+      return;
+    }
+    if(note) note.hidden = true;
+    if(row) row.hidden = false;
+    msalApp = new msal.PublicClientApplication({
+      auth: { clientId: MS.clientId, authority: "https://login.microsoftonline.com/" + (MS.tenant || "organizations"), redirectUri: location.origin + location.pathname },
+      cache: { cacheLocation: "localStorage" }
+    });
+    msalApp.initialize()
+      .then(function(){ return msalApp.handleRedirectPromise(); })
+      .then(function(resp){
+        if(resp && resp.account) msalApp.setActiveAccount(resp.account);
+        var acc = msalApp.getActiveAccount() || msalApp.getAllAccounts()[0];
+        if(acc){
+          msalApp.setActiveAccount(acc);
+          document.getElementById("msUser").textContent = acc.username;
+          loadFromSharePoint(true);
+        }
+      })
+      .catch(function(e){ console.warn("MSAL init:", e && e.message); });
+    var cb = document.getElementById("msConnectBtn");
+    if(cb) cb.addEventListener("click", function(){ loadFromSharePoint(false); });
+    var rb = document.getElementById("msRefreshBtn");
+    if(rb) rb.addEventListener("click", function(){ loadFromSharePoint(false); });
+  }
+
+  loadCfg();
+  initMs();
+
+  // ---------- auto-ajuste de altura dentro del iframe de BAT 360 ----------
+  function reportHeight(){
+    try{
+      if(window.parent && window.parent !== window){
+        var h = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+        window.parent.postMessage({__materiales:"height", h:h}, "*");
+      }
+    }catch(e){}
+  }
+  if(window.ResizeObserver){ try{ new ResizeObserver(reportHeight).observe(document.documentElement); }catch(e){} }
+  window.addEventListener("load", reportHeight);
+  window.addEventListener("resize", reportHeight);
+  setTimeout(reportHeight, 300);
+})();
+</script>
+</body>
+</html>
