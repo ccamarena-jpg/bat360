@@ -6,6 +6,7 @@
 <title>Materiales · BAT 360</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#f4f6fa;
@@ -175,6 +176,21 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 .methodology-body code{font-family:"IBM Plex Mono",monospace; background:var(--surface-2); padding:1px 5px; border-radius:4px; font-size:12px;}
 [hidden]{display:none !important;}
 .truncate-note{padding:10px 18px; font-size:12px; color:var(--text-muted); border-top:1px solid var(--border);}
+.view-toggle{display:flex; gap:8px; margin-bottom:18px;}
+.vt-btn{
+  font-family:inherit; font-size:13px; font-weight:600; padding:8px 14px; border-radius:8px;
+  border:1px solid var(--border); background:var(--surface); color:var(--text-muted); cursor:pointer;
+}
+.vt-btn:hover{color:var(--accent);}
+.vt-btn.active{background:var(--accent); border-color:var(--accent); color:var(--surface);}
+section.charts{display:flex; flex-direction:column; gap:26px; margin-bottom:24px;}
+.chart-controls{display:flex; align-items:center; gap:8px;}
+.chart-controls select{
+  font-family:inherit; font-size:12.5px; padding:5px 8px; border-radius:7px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text);
+}
+.chart-wrap{position:relative; height:360px; padding:16px 18px 18px;}
+.chart-empty{padding:40px 18px; text-align:center; color:var(--text-muted); font-size:13px;}
 </style>
 </head>
 <body>
@@ -182,7 +198,6 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   <div class="brand">
     <span class="eyebrow">TT Audit · Promotoría BAT</span>
     <h1>Materiales de implementación</h1>
-    <p>Sube el archivo <span class="mono">TRACKER v3.0-beta…xlsx</span> (una pestaña por material) y obtén la implementación por cadena, fecha y promotor. Cada pestaña del Excel con columnas de promotor, fecha e "¿Se implementó?" se detecta automáticamente como un material.</p>
   </div>
   <div class="upload-panel">
     <div class="upload-row" id="msRow" hidden>
@@ -231,6 +246,13 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
     </div>
   </div>
   <div class="filter-field">
+    <label>Zona</label>
+    <div class="ms">
+      <button type="button" class="ms-btn" id="zonaBtn" disabled><span id="zonaBtnLabel">Todas las zonas</span><span class="caret">▾</span></button>
+      <div class="ms-panel" id="zonaPanel" hidden></div>
+    </div>
+  </div>
+  <div class="filter-field">
     <label>Material</label>
     <div class="ms">
       <button type="button" class="ms-btn" id="materialBtn" disabled><span id="materialBtnLabel">Todos los materiales</span><span class="caret">▾</span></button>
@@ -253,6 +275,11 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
 <p class="filter-hint">El rango de fechas aplica sobre la fecha registrada en cada pestaña de material (última fecha de chequeo). Los demás filtros aplican a todas las tablas.</p>
 
 <div class="kpi-strip" id="kpiStrip"></div>
+
+<div class="view-toggle" id="viewToggle" hidden>
+  <button type="button" class="vt-btn active" id="vtTablas">📋 Tablas</button>
+  <button type="button" class="vt-btn" id="vtGraficos">📈 Gráficos</button>
+</div>
 
 <section class="tables" id="tablesSection" hidden>
   <div class="table-block">
@@ -319,6 +346,30 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
   </div>
 </section>
 
+<section class="charts" id="chartsSection" hidden>
+  <div class="table-block">
+    <div class="table-head">
+      <h2>📊 Avance de implementación por cadena y material</h2>
+      <span class="desc">Una barra por cadena dentro de cada material, con el % implementado. Respeta los filtros de arriba.</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chartCadenaMaterial"></canvas></div>
+  </div>
+  <div class="table-block">
+    <div class="table-head">
+      <h2>📈 Avance semanal por cadena/promotor</h2>
+      <div class="chart-controls">
+        <label for="chartGroupBy" style="font-size:12px;color:var(--text-muted)">Agrupar líneas por</label>
+        <select id="chartGroupBy">
+          <option value="cadena">Cadena</option>
+          <option value="promotor">Promotor</option>
+        </select>
+      </div>
+      <span class="desc">% implementado por semana, según la fecha de chequeo de cada fila. Usa el filtro de Material/Cadena arriba para acotar qué se agrupa aquí. Si hay más de 8 líneas, el resto se agrupa como "Otros".</span>
+    </div>
+    <div class="chart-wrap"><canvas id="chartSemanal"></canvas></div>
+  </div>
+</section>
+
 <footer class="meta">
   <details class="methodology">
     <summary>ℹ️ Cómo se calcula esto</summary>
@@ -327,6 +378,7 @@ details.methodology summary{cursor:pointer; font-weight:600; font-size:13.5px; c
       <p><strong>% Implementado</strong> = filas con "¿Se implementó?" = SI, dividido entre filas con SI o NO (las filas sin dato se ignoran en el %, pero sí cuentan como "evaluadas" en los KPIs de conteo).</p>
       <p>El <strong>filtro de fecha</strong> (Desde/Hasta) aplica sobre la columna FECHA de cada pestaña, que normalmente es la fecha del último chequeo de ese material en esa tienda — no es necesariamente la misma fecha entre materiales distintos para la misma tienda.</p>
       <p>La columna <strong>Evidencia</strong> del detalle muestra el link a la foto/sustento cuando la pestaña lo trae.</p>
+      <p>El filtro <strong>Zona</strong> usa la columna de zona de cada pestaña (normalmente LIMA / KC / NKC). La vista <strong>📈 Gráficos</strong> colorea cada cadena/promotor siempre con el mismo color (no cambia aunque cambies los filtros); si hay más de 8 líneas en un gráfico, el resto se agrupa como "Otros" en vez de reciclar colores.</p>
       <p>Este visor no reemplaza el Excel fuente — para el detalle completo pídeselo a Claude o revisa el archivo original en SharePoint.</p>
     </div>
   </details>
@@ -443,7 +495,7 @@ window.MAT_MS = {
           codigo: String(codigo||""),
           estacion: String(estacion||""),
           promotor: (map.promotor!==-1 ? String(r[map.promotor]||"").trim() : "") || "(SIN PROMOTOR)",
-          zona: map.zona!==-1 ? String(r[map.zona]||"") : "",
+          zona: (map.zona!==-1 ? String(r[map.zona]||"").trim().toUpperCase() : "") || "(SIN ZONA)",
           pareto: map.pareto!==-1 ? String(r[map.pareto]||"") : "",
           frecuencia: map.frecuencia!==-1 ? String(r[map.frecuencia]||"") : "",
           diaVisita: map.diaVisita!==-1 ? String(r[map.diaVisita]||"") : "",
@@ -466,11 +518,48 @@ window.MAT_MS = {
     materials: [],       // [{name, count}]
     materialExcluded: {}, // name -> true si el usuario lo desmarcó en el editor
     cadenaSel: [],        // vacío = todas
+    zonaSel: [],          // vacío = todas
     materialSel: [],      // vacío = todas (dentro de las no excluidas)
+    cadenaOrder: [],       // orden estable (por volumen) para colorear series de gráficos
+    promotorOrder: [],
+    lastRows: [],
+    view: "tablas",
     loaded: false
   };
   var cfg = {green:90, red:70};
   var sortState = {};
+
+  // ═══════ Paleta categórica (gráficos) — orden fijo, nunca se recicla ═══════
+  var CHART_PALETTE = ["#2a78d6","#eb6834","#1baf7a","#eda100","#e87ba4","#008300","#6250d6","#e34948"];
+  var CHART_OTHER_COLOR = "#898781";
+  var CHART_GRID_COLOR = "#e1e0d9";
+
+  function buildColorOrder(records, field){
+    var count = {};
+    records.forEach(function(r){ var k=r[field]; count[k]=(count[k]||0)+1; });
+    return Object.keys(count).sort(function(a,b){ return count[b]-count[a]; });
+  }
+  function groupKey(order, name){
+    var i = order.indexOf(name);
+    return (i!==-1 && i<8) ? name : "Otros";
+  }
+  function colorForGroup(order, name){
+    if(name==="Otros") return CHART_OTHER_COLOR;
+    var i = order.indexOf(name);
+    return CHART_PALETTE[i % CHART_PALETTE.length];
+  }
+  function mondayOf(date){
+    var d = new Date(date.getTime());
+    var day = (d.getDay()+6)%7;
+    d.setDate(d.getDate()-day);
+    d.setHours(0,0,0,0);
+    return d;
+  }
+  function weekKeyOf(date){ return mondayOf(date).toISOString().slice(0,10); }
+  function weekLabel(d){
+    try{ return new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short"}).format(d).replace(".",""); }
+    catch(e){ return d.toISOString().slice(5,10); }
+  }
 
   function loadCfg(){
     try{
@@ -499,10 +588,14 @@ window.MAT_MS = {
     state.materials = parsed.materials;
     state.materialExcluded = {};
     state.cadenaSel = [];
+    state.zonaSel = [];
     state.materialSel = [];
+    state.cadenaOrder = buildColorOrder(parsed.records, "cadena");
+    state.promotorOrder = buildColorOrder(parsed.records, "promotor");
     state.loaded = true;
     document.getElementById("emptyBanner").hidden = true;
     document.getElementById("tablesSection").hidden = false;
+    document.getElementById("viewToggle").hidden = false;
     document.getElementById("materialesEditorWrap").hidden = false;
     renderMaterialesEditor();
     populateFilterOptions();
@@ -555,16 +648,17 @@ window.MAT_MS = {
     var base = state.allRecords.filter(function(r){ return mats.indexOf(r.material)!==-1; });
 
     var cadenaBtn = document.getElementById("cadenaBtn");
+    var zonaBtn = document.getElementById("zonaBtn");
     var materialBtn = document.getElementById("materialBtn");
     var promoSel = document.getElementById("filterPromotor");
     var desdeEl = document.getElementById("filtDesde"), hastaEl = document.getElementById("filtHasta");
 
     if(!base.length){
-      cadenaBtn.disabled = true; materialBtn.disabled = true; promoSel.disabled = true;
+      cadenaBtn.disabled = true; zonaBtn.disabled = true; materialBtn.disabled = true; promoSel.disabled = true;
       desdeEl.disabled = true; hastaEl.disabled = true;
       return;
     }
-    cadenaBtn.disabled = false; materialBtn.disabled = false; promoSel.disabled = false;
+    cadenaBtn.disabled = false; zonaBtn.disabled = false; materialBtn.disabled = false; promoSel.disabled = false;
     desdeEl.disabled = false; hastaEl.disabled = false;
 
     var cadenaSet = {}; base.forEach(function(r){ cadenaSet[r.cadena]=true; });
@@ -572,6 +666,13 @@ window.MAT_MS = {
     state.cadenaSel = state.cadenaSel.filter(function(c){ return cadenas.indexOf(c)!==-1; });
     buildMsPanel("cadenaPanel","cadenaBtnLabel", cadenas, function(k){return k;}, state.cadenaSel, function(sel){
       state.cadenaSel = sel; populateFilterOptions(); applyFiltersAndRender();
+    });
+
+    var zonaSet = {}; base.forEach(function(r){ zonaSet[r.zona]=true; });
+    var zonas = Object.keys(zonaSet).sort();
+    state.zonaSel = state.zonaSel.filter(function(z){ return zonas.indexOf(z)!==-1; });
+    buildMsPanel("zonaPanel","zonaBtnLabel", zonas, function(k){return k;}, state.zonaSel, function(sel){
+      state.zonaSel = sel; populateFilterOptions(); applyFiltersAndRender();
     });
 
     state.materialSel = state.materialSel.filter(function(m){ return mats.indexOf(m)!==-1; });
@@ -601,6 +702,7 @@ window.MAT_MS = {
     var mats = activeMaterials();
     var matSel = state.materialSel.length ? state.materialSel : mats;
     var cadSel = state.cadenaSel;
+    var zonSel = state.zonaSel;
     var promoFilter = document.getElementById("filterPromotor").value;
     var desde = document.getElementById("filtDesde").value;
     var hasta = document.getElementById("filtHasta").value;
@@ -608,6 +710,7 @@ window.MAT_MS = {
       if(mats.indexOf(r.material)===-1) return false;
       if(matSel.indexOf(r.material)===-1) return false;
       if(cadSel.length && cadSel.indexOf(r.cadena)===-1) return false;
+      if(zonSel.length && zonSel.indexOf(r.zona)===-1) return false;
       if(promoFilter!=="ALL" && r.promotor!==promoFilter) return false;
       if(r.fecha){
         var k = dayKeyOf(r.fecha);
@@ -745,11 +848,129 @@ window.MAT_MS = {
 
   function applyFiltersAndRender(){
     var rows = state.loaded ? currentFiltered() : [];
+    state.lastRows = rows;
     renderKpis(rows);
     renderCadenaMaterial(rows);
     renderPromotorResumen(rows);
     renderDetalle(rows);
+    if(state.view==="graficos") renderCharts(rows);
   }
+
+  // ═══════ Gráficos ═══════
+  var chartCMInstance = null, chartSemInstance = null;
+
+  function pctOf(si, no){ return (si+no) ? Math.round(si/(si+no)*100) : null; }
+
+  function renderChartCadenaMaterial(rows){
+    var canvas = document.getElementById("chartCadenaMaterial");
+    if(!canvas || typeof Chart==="undefined") return;
+    if(chartCMInstance){ chartCMInstance.destroy(); chartCMInstance = null; }
+    if(!rows.length) return;
+    var order = state.cadenaOrder;
+    var materiales = {}, groupsPresent = {};
+    rows.forEach(function(r){ materiales[r.material]=true; groupsPresent[groupKey(order, r.cadena)]=true; });
+    var matList = Object.keys(materiales).sort();
+    var groupNames = order.slice(0,8).filter(function(n){ return groupsPresent[n]; });
+    if(groupsPresent["Otros"]) groupNames.push("Otros");
+
+    var datasets = groupNames.map(function(gname){
+      var data = matList.map(function(mat){
+        var si=0,no=0;
+        rows.forEach(function(r){
+          if(r.material!==mat || groupKey(order,r.cadena)!==gname) return;
+          if(r.implementado===true) si++; else if(r.implementado===false) no++;
+        });
+        return pctOf(si,no);
+      });
+      var color = colorForGroup(order, gname);
+      return {label:gname, data:data, backgroundColor:color, borderRadius:{topLeft:4,topRight:4}, borderSkipped:false, maxBarThickness:24};
+    });
+
+    chartCMInstance = new Chart(canvas.getContext("2d"), {
+      type:"bar",
+      data:{labels:matList, datasets:datasets},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        scales:{
+          y:{min:0, max:100, grid:{color:CHART_GRID_COLOR}, ticks:{callback:function(v){ return v+"%"; }}},
+          x:{grid:{display:false}}
+        },
+        plugins:{
+          legend:{display:datasets.length>1, position:"top", labels:{boxWidth:10,boxHeight:10,usePointStyle:true}},
+          tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+": "+(ctx.parsed.y===null?"sin datos":ctx.parsed.y+"%"); }}}
+        }
+      }
+    });
+  }
+
+  function renderChartSemanal(rows, groupBy){
+    var canvas = document.getElementById("chartSemanal");
+    if(!canvas || typeof Chart==="undefined") return;
+    if(chartSemInstance){ chartSemInstance.destroy(); chartSemInstance = null; }
+    var field = groupBy==="promotor" ? "promotor" : "cadena";
+    var order = groupBy==="promotor" ? state.promotorOrder : state.cadenaOrder;
+    var dated = rows.filter(function(r){ return r.fecha; });
+    if(!dated.length) return;
+
+    var weeks = {};
+    dated.forEach(function(r){ weeks[weekKeyOf(r.fecha)] = mondayOf(r.fecha); });
+    var weekKeys = Object.keys(weeks).sort();
+
+    var groupsPresent = {};
+    dated.forEach(function(r){ groupsPresent[groupKey(order, r[field])]=true; });
+    var groupNames = order.slice(0,8).filter(function(n){ return groupsPresent[n]; });
+    if(groupsPresent["Otros"]) groupNames.push("Otros");
+
+    var datasets = groupNames.map(function(gname){
+      var data = weekKeys.map(function(wk){
+        var si=0,no=0;
+        dated.forEach(function(r){
+          if(weekKeyOf(r.fecha)!==wk || groupKey(order,r[field])!==gname) return;
+          if(r.implementado===true) si++; else if(r.implementado===false) no++;
+        });
+        return pctOf(si,no);
+      });
+      var color = colorForGroup(order, gname);
+      return {label:gname, data:data, borderColor:color, backgroundColor:color, pointRadius:4, pointBorderWidth:2, pointBorderColor:"#fff", borderWidth:2, tension:0.15, spanGaps:true};
+    });
+
+    chartSemInstance = new Chart(canvas.getContext("2d"), {
+      type:"line",
+      data:{labels:weekKeys.map(function(wk){ return weekLabel(weeks[wk]); }), datasets:datasets},
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        interaction:{mode:"index", intersect:false},
+        scales:{
+          y:{min:0, max:100, grid:{color:CHART_GRID_COLOR}, ticks:{callback:function(v){ return v+"%"; }}},
+          x:{grid:{display:false}}
+        },
+        plugins:{
+          legend:{display:datasets.length>1, position:"top", labels:{boxWidth:10,boxHeight:10,usePointStyle:true}},
+          tooltip:{callbacks:{label:function(ctx){ return ctx.dataset.label+": "+(ctx.parsed.y===null?"sin datos":ctx.parsed.y+"%"); }}}
+        }
+      }
+    });
+  }
+
+  function renderCharts(rows){
+    renderChartCadenaMaterial(rows);
+    renderChartSemanal(rows, document.getElementById("chartGroupBy").value);
+  }
+
+  function setMatView(v){
+    state.view = v;
+    document.getElementById("vtTablas").classList.toggle("active", v==="tablas");
+    document.getElementById("vtGraficos").classList.toggle("active", v==="graficos");
+    document.getElementById("tablesSection").hidden = v!=="tablas";
+    document.getElementById("chartsSection").hidden = v!=="graficos";
+    if(v==="graficos") renderCharts(state.lastRows);
+    setTimeout(reportHeight, 60);
+  }
+  document.getElementById("vtTablas").addEventListener("click", function(){ setMatView("tablas"); });
+  document.getElementById("vtGraficos").addEventListener("click", function(){ setMatView("graficos"); });
+  document.getElementById("chartGroupBy").addEventListener("change", function(){
+    renderChartSemanal(state.lastRows, this.value);
+  });
 
   // ═══════ tablas ordenables ═══════
   function applySort(rows, tableId){
@@ -800,7 +1021,7 @@ window.MAT_MS = {
     document.getElementById(id).addEventListener("change", function(){ readCfg(); if(state.loaded) applyFiltersAndRender(); });
   });
 
-  ["cadena","material"].forEach(function(k){
+  ["cadena","zona","material"].forEach(function(k){
     var btn = document.getElementById(k+"Btn"), panel = document.getElementById(k+"Panel");
     btn.addEventListener("click", function(e){ e.stopPropagation(); if(btn.disabled) return; panel.hidden = !panel.hidden; });
     document.addEventListener("click", function(e){
