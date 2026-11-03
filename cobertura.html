@@ -154,7 +154,7 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
     <div class="kpi-strip" id="kpis"></div>
     <section class="block">
       <h2>Cobertura por promotor</h2>
-      <p class="sub"><b>Programadas</b> = tiendas que le tocan esa semana según el padrón (día y frecuencia). <b>Vencidas</b> = las de días anteriores a hoy. <b>Cubierta</b> = hubo visita a la tienda en la semana (mismo día o en otro). <b>Cobertura al día</b> = cubiertas ÷ vencidas (solo lo que ya debió hacerse). <b>Avance semana</b> = cubiertas ÷ programadas (todo lo de la semana). Hoy y los días siguientes cuentan como pendientes.</p>
+      <p class="sub"><b>Programadas</b> = tiendas que le tocan esa semana según el padrón (día y frecuencia). <b>Vencidas</b> = las de días anteriores a hoy. <b>Cubierta</b> = hubo visita a la tienda dentro del rango elegido (mismo día o en otro; sábados y domingos incluidos). <b>Cobertura al día</b> = cubiertas ÷ vencidas (solo lo que ya debió hacerse). <b>Avance semana</b> = cubiertas ÷ programadas (todo lo de la semana). Hoy y los días siguientes cuentan como pendientes.</p>
       <div class="table-wrap" id="tblPromotor"></div>
     </section>
     <section class="block two-col">
@@ -220,7 +220,7 @@ window.COB_REF_Q1 = "2026-10-26";
   function pct(a,b){ return b ? Math.round(a*1000/b)/10 : 0; }
   var MON3 = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,set:8,oct:9,nov:10,dic:11};
   var DIAS = ["lunes","martes","miercoles","jueves","viernes","sabado","domingo"];
-  var DIAS_T = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+  var DIAS_T = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 
   function parseDate(v){
     if(v instanceof Date && !isNaN(v)) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
@@ -386,13 +386,15 @@ window.COB_REF_Q1 = "2026-10-26";
     if(sel.cad && !sel.cad.has(p.r.cadena)) return false;
     return true;
   }
-  function evaluar(monday){
+  function evaluar(monday, rg){
     var today=new Date(); today.setHours(0,0,0,0);
     var domingo=addDays(monday,6);
     var prog=programacion(monday).filter(filterRow);
     prog.forEach(function(p){
       p.monday=monday;
-      var vs=(INFO && INFO.byStore[p.r.store] || []).filter(function(v){ return v.fecha>=monday && v.fecha<=domingo; });
+      var vs=(INFO && INFO.byStore[p.r.store] || []).filter(function(v){
+        // solo visitas dentro del rango exacto elegido (sábados y domingos de la semana incluidos)
+        return v.fecha>=monday && v.fecha<=domingo && v.fecha>=rg.d1 && v.fecha<=rg.d2; });
       p.visitas=vs;
       if(vs.length){
         var mismo=vs.some(function(v){ return ymd(v.fecha)===ymd(p.fecha); });
@@ -418,7 +420,7 @@ window.COB_REF_Q1 = "2026-10-26";
     var rg=rango(), prog=[], qs=[];
     rg.mondays.forEach(function(m){
       qs.push(ymd(m).slice(5)+" "+weekQ(m));
-      evaluar(m).forEach(function(p){ if(p.fecha>=rg.d1 && p.fecha<=rg.d2) prog.push(p); });
+      evaluar(m, rg).forEach(function(p){ if(p.fecha>=rg.d1 && p.fecha<=rg.d2) prog.push(p); });
     });
     $("filterHint").textContent="Del "+ymd(rg.d1)+" al "+ymd(rg.d2)+" · "+(rg.mondays.length>1? rg.mondays.length+" semanas (lunes y quincena: "+qs.join(", ")+")" : "semana "+qs[0]+" (la QUINCENAL de esa quincena toca; SEMANAL toca siempre)")+". "+
       (rg.truncada? "Rango limitado a "+MAX_SEM+" semanas. " : "")+
@@ -503,7 +505,7 @@ window.COB_REF_Q1 = "2026-10-26";
   }
   function calTable(prog, monday){
     var by={};
-    prog.forEach(function(p){ var g=by[p.promotor]||(by[p.promotor]=[[],[],[],[],[],[]]); if(p.di<6) g[p.di].push(p); });
+    prog.forEach(function(p){ var g=by[p.promotor]||(by[p.promotor]=[[],[],[],[],[],[],[]]); if(p.di<7) g[p.di].push(p); });
     var ks=Object.keys(by).sort();
     return '<table class="cal"><thead><tr><th>Promotor</th>'+DIAS_T.map(function(d,i){ return '<th>'+d+' '+ymd(addDays(monday,i)).slice(8)+'</th>'; }).join("")+'<th class="num">Total</th></tr></thead><tbody>'+
       ks.map(function(k){
