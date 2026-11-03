@@ -56,6 +56,9 @@ input[type=file]{display:none;}
 .filter-field label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:600;}
 .filter-field select{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px;
   border:1px solid var(--border); background:var(--bg); color:var(--text); min-width:150px;}
+.filter-field input[type=search]{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);}
+a.foto{text-decoration:none; font-size:15px; margin-right:6px; white-space:nowrap;}
+a.foto small{font-size:10.5px; color:var(--text-muted); margin-left:2px;}
 .filter-hint{font-size:12px; color:var(--text-muted); margin:0 0 16px;}
 .ms{position:relative;}
 .ms-btn{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
@@ -148,7 +151,7 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
     <div class="kpi-strip" id="kpis"></div>
     <section class="block">
       <h2>Cobertura por promotor</h2>
-      <p class="sub">Programadas = tiendas que le tocan esa semana según día y frecuencia. <b>Cubierta</b> = hubo visita a la tienda en la semana (mismo día o en otro día). Las de días que aún no llegan quedan como pendientes.</p>
+      <p class="sub"><b>Programadas</b> = tiendas que le tocan esa semana según el padrón (día y frecuencia). <b>Vencidas</b> = las de días anteriores a hoy. <b>Cubierta</b> = hubo visita a la tienda en la semana (mismo día o en otro). <b>Cobertura al día</b> = cubiertas ÷ vencidas (solo lo que ya debió hacerse). <b>Avance semana</b> = cubiertas ÷ programadas (todo lo de la semana). Hoy y los días siguientes cuentan como pendientes.</p>
       <div class="table-wrap" id="tblPromotor"></div>
     </section>
     <section class="block two-col">
@@ -162,6 +165,16 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
         <p class="sub" id="ncSub"></p>
         <div class="table-wrap" id="tblNoCub"></div>
       </div>
+    </section>
+    <section class="block">
+      <h2>Listado de tiendas</h2>
+      <p class="sub">Todas las tiendas programadas de la semana, con su estado, si la visita fue efectiva y la foto counter de la visita (📷 abre la foto; el enlace lleva el código de la tienda).</p>
+      <div class="filter-bar" style="margin-bottom:10px">
+        <div class="filter-field"><label for="qTienda">Buscar</label><input type="search" id="qTienda" placeholder="Tienda, código, distrito o promotor" style="min-width:280px"></div>
+        <div class="filter-field"><label for="qEstado">Estado</label>
+          <select id="qEstado"><option value="">Todas</option><option value="cub">Cubiertas</option><option value="nocub">No cubiertas</option><option value="pend">Pendientes</option><option value="ef">Efectivas</option><option value="noef">No efectivas</option></select></div>
+      </div>
+      <div class="table-wrap" id="tblTiendas"></div>
     </section>
   </div>
 
@@ -293,7 +306,13 @@ window.COB_REF_Q1 = "2026-10-26";
         iPer=head.findIndex(function(c){return /permiti/i.test(c) && !/-(OPCION|FOTO)$/i.test(c) && !/_comentario$/i.test(c);}),
         iOpAb=head.findIndex(function(c){return /^local-abierto-OPCION$/i.test(c);}),
         iOpPer=head.findIndex(function(c){return /permiti/i.test(c) && /-OPCION$/i.test(c);}),
-        iComOp=head.findIndex(function(c){return /^COMENTARIO_OPCION$/i.test(c);});
+        iComOp=head.findIndex(function(c){return /^COMENTARIO_OPCION$/i.test(c);}),
+        // fotos de la visita: panorámica = foto tomada al marcar "local abierto"; las demás son opcionales
+        iFPan=head.findIndex(function(c){return /^local-abierto-FOTO$/i.test(c);}),
+        iFCnt=head.findIndex(function(c){return /^Foto counter-FOTO$/i.test(c);}),
+        iFPer=head.findIndex(function(c){return /permiti/i.test(c) && /-FOTO$/i.test(c);}),
+        iFReg=head.findIndex(function(c){return /^Registro Inicial-FOTO$/i.test(c);});
+    function url(row,i){ var v=i>=0?clean(row[i]):""; return /^https?:/i.test(v)?v:""; }
     function txt(row,i){ var v=i>=0?clean(row[i]):""; return (v==="null"||v==="0"||/^https?:/i.test(v))?"":v; }
     var visits=[], by={};
     for(var r=1;r<rows.length;r++){
@@ -306,7 +325,8 @@ window.COB_REF_Q1 = "2026-10-26";
         motivo = ab==="0" ? txt(row,iOpAb) : txt(row,iOpPer);
         if(!motivo || /^otro/i.test(motivo)) motivo = txt(row,iComOp) || motivo;
       }
-      var vis={store:store,fecha:f,promotor:clean(row[iA]),abierto:(ab==="1"),efectiva:efectiva,motivo:motivo};
+      var vis={store:store,fecha:f,promotor:clean(row[iA]),abierto:(ab==="1"),efectiva:efectiva,motivo:motivo,
+        fotos:{pan:url(row,iFPan),counter:url(row,iFCnt),permitio:url(row,iFPer),registro:url(row,iFReg)}};
       visits.push(vis); (by[store]||(by[store]=[])).push(vis);
     }
     return { visits:visits, byStore:by };
@@ -360,8 +380,11 @@ window.COB_REF_Q1 = "2026-10-26";
         p.estado = mismo ? "mismo" : "otro";
         p.efectiva = ef;
         p.motivo = ef ? "" : (vs.filter(function(v){return v.motivo;})[0]||{motivo:""}).motivo;
+        var last = vs.slice().sort(function(a,b){ return b.fecha-a.fecha; })[0];
+        p.ultima = last.fecha; p.fotos = last.fotos;
       } else {
-        p.estado = p.fecha>today ? "pend" : "nocub";
+        // hoy todavía puede visitarse: cuenta como pendiente, no como no cubierta
+        p.estado = p.fecha>=today ? "pend" : "nocub";
       }
     });
     return prog;
@@ -385,16 +408,16 @@ window.COB_REF_Q1 = "2026-10-26";
       kpi("Cobertura", vencidas.length? pct(cub.length,vencidas.length).toFixed(1)+"%":"—", cub.length+" de "+vencidas.length+" vencidas") +
       kpi("Efectividad", cub.length? pct(efect.length,cub.length).toFixed(1)+"%":"—", efect.length+" de "+cub.length+" visitas con local abierto") +
       kpi("No cubiertas", (vencidas.length-cub.length).toLocaleString("es-PE"), "sin visita registrada") +
-      kpi("Pendientes", pend.toLocaleString("es-PE"), "días que aún no llegan");
+      kpi("Pendientes", pend.toLocaleString("es-PE"), "de hoy y días siguientes");
 
     var byP={};
     prog.forEach(function(p){ var g=byP[p.promotor]||(byP[p.promotor]={n:0,v:0,c:0,e:0,otro:0,pend:0}); g.n++;
       if(p.estado==="pend") g.pend++; else { g.v++; if(p.estado!=="nocub"){ g.c++; if(p.estado==="otro") g.otro++; if(p.efectiva) g.e++; } } });
     var pk=Object.keys(byP).sort(function(a,b){ return pct(byP[a].c,byP[a].v)-pct(byP[b].c,byP[b].v) || a.localeCompare(b); });
     $("tblPromotor").innerHTML = !pk.length? '<div class="empty">No hay tiendas programadas con los filtros actuales.</div>' :
-      '<table><thead><tr><th>Promotor</th><th class="num">Programadas</th><th class="num">Vencidas</th><th class="num">Cubiertas</th><th class="num">No cubiertas</th><th class="num">En otro día</th><th class="num">Efectivas</th><th class="num">Pendientes</th><th>Cobertura</th></tr></thead><tbody>'+
-      pk.map(function(k){ var g=byP[k], c=pct(g.c,g.v);
-        return '<tr><td>'+esc(k)+'</td><td class="num mono">'+g.n+'</td><td class="num mono">'+g.v+'</td><td class="num mono">'+g.c+'</td><td class="num mono">'+(g.v-g.c)+'</td><td class="num mono">'+g.otro+'</td><td class="num mono">'+g.e+'</td><td class="num mono">'+g.pend+'</td><td>'+(g.v?'<span class="pill '+semaforo(c)+'">'+c.toFixed(1)+'%</span>':'<span class="pill pend">—</span>')+'</td></tr>'; }).join("")+'</tbody></table>';
+      '<table><thead><tr><th>Promotor</th><th class="num">Programadas</th><th class="num">Vencidas</th><th class="num">Cubiertas</th><th class="num">No cubiertas</th><th class="num">En otro día</th><th class="num">Efectivas</th><th class="num">Pendientes</th><th>Cobertura al día</th><th>Avance semana</th></tr></thead><tbody>'+
+      pk.map(function(k){ var g=byP[k], c=pct(g.c,g.v), av=pct(g.c,g.n);
+        return '<tr><td>'+esc(k)+'</td><td class="num mono">'+g.n+'</td><td class="num mono">'+g.v+'</td><td class="num mono">'+g.c+'</td><td class="num mono">'+(g.v-g.c)+'</td><td class="num mono">'+g.otro+'</td><td class="num mono">'+g.e+'</td><td class="num mono">'+g.pend+'</td><td>'+(g.v?'<span class="pill '+semaforo(c)+'">'+c.toFixed(1)+'%</span> <span class="mono" style="font-size:11.5px;color:var(--text-muted)">'+g.c+'/'+g.v+'</span>':'<span class="pill pend" title="Aún no vence ninguna tienda">—</span>')+'</td><td><span class="bar" style="width:'+Math.round(av*0.6)+'px;background:var(--accent)"></span><span class="mono">'+av.toFixed(1)+'%</span> <span class="mono" style="font-size:11.5px;color:var(--text-muted)">'+g.c+'/'+g.n+'</span></td></tr>'; }).join("")+'</tbody></table>';
 
     var noEf=cub.filter(function(p){return !p.efectiva;}), gm={};
     noEf.forEach(function(p){ var c=categoria(p.motivo), g=gm[c]||(gm[c]={n:0,ej:{}}); g.n++; if(p.motivo) g.ej[p.motivo]=(g.ej[p.motivo]||0)+1; });
@@ -409,6 +432,40 @@ window.COB_REF_Q1 = "2026-10-26";
     $("tblNoCub").innerHTML = !nc.length? '<div class="empty">Todo lo vencido está cubierto.</div>' :
       '<table><thead><tr><th>Día</th><th>Promotor</th><th>Tienda</th><th>Distrito</th></tr></thead><tbody>'+
       nc.slice(0,300).map(function(p){ return '<tr><td class="mono">'+DIAS_T[p.di].slice(0,3)+" "+ymd(p.fecha).slice(5)+'</td><td>'+esc(p.promotor)+'</td><td>'+esc(p.r.estacion||p.r.store)+'</td><td>'+esc(p.r.distrito)+'</td></tr>'; }).join("")+'</tbody></table>';
+    lastProg = prog;
+    renderTiendas();
+    reportHeight();
+  }
+
+  /* ───────── listado de tiendas (buscador + estado + fotos) ───────── */
+  var lastProg = [];
+  function fotoLinks(f){
+    if(!f) return "";
+    // solo la "Foto counter" (columna Foto counter-FOTO de Información General)
+    return f.counter ? '<a class="foto" href="'+esc(f.counter)+'" target="_blank" rel="noopener" title="Foto counter">📷<small>counter</small></a>' : "";
+  }
+  function renderTiendas(){
+    var q=norm($("qTienda").value), est=$("qEstado").value;
+    var rows=lastProg.filter(function(p){
+      if(est==="cub" && (p.estado==="pend"||p.estado==="nocub")) return false;
+      if(est==="nocub" && p.estado!=="nocub") return false;
+      if(est==="pend" && p.estado!=="pend") return false;
+      if(est==="ef" && !(p.efectiva)) return false;
+      if(est==="noef" && !(p.visitas && p.visitas.length && !p.efectiva)) return false;
+      if(q){ var hay=norm([p.r.store,p.r.estacion,p.r.distrito,p.promotor,p.r.cadena].join(" ")); if(hay.indexOf(q)===-1) return false; }
+      return true;
+    }).sort(function(a,b){ return a.fecha-b.fecha || a.promotor.localeCompare(b.promotor) || (a.r.estacion||"").localeCompare(b.r.estacion||""); });
+    var ESTADO={mismo:["ok","Cubierta (mismo día)"],otro:["warn","Cubierta (otro día)"],nocub:["crit","No cubierta"],pend:["pend","Pendiente"]};
+    var MAX=500;
+    $("tblTiendas").innerHTML = !rows.length ? '<div class="empty">No hay tiendas con ese filtro.</div>' :
+      '<table><thead><tr><th>Día</th><th>Promotor</th><th>Código</th><th>Tienda</th><th>Distrito</th><th>Estado</th><th>Efectiva</th><th>Foto counter</th></tr></thead><tbody>'+
+      rows.slice(0,MAX).map(function(p){
+        var e=ESTADO[p.estado], visited=p.visitas && p.visitas.length;
+        var ef = !visited ? '<span class="pill pend">—</span>' : p.efectiva ? '<span class="pill ok">Sí</span>' :
+          '<span class="pill crit">No</span>'+(p.motivo?' <span style="font-size:11.5px;color:var(--text-muted)">'+esc(p.motivo)+'</span>':'');
+        return '<tr><td class="mono">'+DIAS_T[p.di].slice(0,3)+" "+ymd(p.fecha).slice(5)+'</td><td>'+esc(p.promotor)+'</td><td class="mono">'+esc(p.r.store)+'</td><td>'+esc(p.r.estacion||p.r.store)+
+          '</td><td>'+esc(p.r.distrito)+'</td><td><span class="pill '+e[0]+'">'+e[1]+'</span>'+(visited&&p.ultima?' <span class="mono" style="font-size:11px;color:var(--text-muted)">'+ymd(p.ultima).slice(5)+'</span>':'')+'</td><td>'+ef+'</td><td>'+fotoLinks(p.fotos)+'</td></tr>'; }).join("")+
+      '</tbody></table>'+(rows.length>MAX?'<div class="empty">Se muestran '+MAX+' de '+rows.length+' tiendas: usa el buscador para acotar.</div>':'');
     reportHeight();
   }
 
@@ -493,6 +550,8 @@ window.COB_REF_Q1 = "2026-10-26";
     [].forEach.call($("viewSeg").querySelectorAll("button"),function(x){ x.classList.toggle("on",x===b); });
     $("vCob").hidden=view!=="cob"; $("vCal").hidden=view!=="cal"; render(); });
   ["fSemana","fVig","fZona"].forEach(function(id){ $(id).addEventListener("change",render); });
+  $("qTienda").addEventListener("input",function(){ renderTiendas(); });
+  $("qEstado").addEventListener("change",function(){ renderTiendas(); });
 
   /* ───────── SharePoint (Graph + MSAL) ───────── */
   var MS=window.COB_MS||{}, msalApp=null, busy=false;
