@@ -94,6 +94,13 @@ th,td{padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); 
 th{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); background:var(--surface-2); position:sticky; top:0;}
 td.num, th.num{text-align:right;}
 tr:last-child td{border-bottom:none;}
+.sec-head{display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; justify-content:space-between; margin-bottom:4px;}
+.sec-head h2{margin:0;}
+.seg{display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface);}
+.seg button{font-family:inherit; font-size:12.5px; font-weight:600; padding:6px 12px; border:none; background:transparent; color:var(--text-muted); cursor:pointer;}
+.seg button.on{background:var(--accent); color:var(--surface);}
+th.sortable{cursor:pointer; user-select:none;}
+.bar{display:inline-block; height:8px; border-radius:4px; background:var(--ok); vertical-align:middle; margin-right:6px;}
 .two-col{display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px;}
 .empty{padding:18px; color:var(--text-muted); font-size:13px;}
 footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--border); padding-top:12px; margin-top:24px;}
@@ -147,9 +154,16 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
   <div class="kpi-strip" id="kpis"></div>
 
   <section class="block">
-    <h2>Avance por material</h2>
-    <p class="sub">Cada gráfico cuenta <b>tiendas</b>: implementadas (al menos una visita con el material puesto) frente a no implementadas. Los chips indican el tipo de implementación.</p>
+    <div class="sec-head">
+      <h2>Avance por material</h2>
+      <div class="seg" id="viewSeg" role="group" aria-label="Vista">
+        <button type="button" data-v="graf" class="on">📊 Gráficos</button>
+        <button type="button" data-v="tabla">📋 Tabla</button>
+      </div>
+    </div>
+    <p class="sub">Se cuentan <b>tiendas</b>: implementadas (al menos una visita con el material puesto) frente a no implementadas. Los chips indican el tipo de implementación.</p>
     <div class="pie-grid" id="pies"></div>
+    <div class="table-wrap" id="tblAvance" hidden></div>
   </section>
 
   <section class="block two-col">
@@ -432,6 +446,44 @@ window.MAT_MS = {
   }
   function ejemplos(map){ return Object.keys(map).sort(function(a,b){return map[b]-map[a];}).slice(0,2).map(function(t){ return "“"+t+"”"; }).join(" · "); }
 
+  var view = "graf", lastList = [], sortKey = "total", sortDir = -1;
+  function applyView(){
+    $("pies").hidden = view!=="graf";
+    $("tblAvance").hidden = view!=="tabla";
+    [].forEach.call($("viewSeg").querySelectorAll("button"), function(b){ b.classList.toggle("on", b.getAttribute("data-v")===view); });
+    reportHeight();
+  }
+  function renderAvanceTable(){
+    var rows = lastList.map(function(m){
+      var pend = m.meta ? Math.max(0, m.meta-m.total) : 0;
+      return { id:m.id, nombre:matLabel(m.id), total:m.total, ok:m.ok, no:m.no, pct:m.total?m.ok/m.total:-1, meta:m.meta, pend:pend,
+        tipos:Object.keys(m.tipos).map(function(t){ return t+": "+m.tipos[t]; }).join(" · ") };
+    });
+    rows.sort(function(a,b){
+      var x=a[sortKey], y=b[sortKey];
+      if(typeof x==="string") return sortDir*x.localeCompare(y);
+      return sortDir*(x-y) || a.nombre.localeCompare(b.nombre);
+    });
+    var cols = [["nombre","Material",0],["total","Tiendas",1],["ok","Implementadas",1],["no","No impl.",1],["pct","% implementado",1],["meta","Meta",1],["pend","Pendientes",1],["tipos","Tipo de implementación",0]];
+    var tot = rows.reduce(function(a,r){ a.t+=r.total; a.o+=r.ok; a.n+=r.no; return a; },{t:0,o:0,n:0});
+    $("tblAvance").innerHTML = !rows.length ? '<div class="empty">No hay registros con los filtros actuales.</div>' :
+      '<table><thead><tr>'+cols.map(function(c){
+        return '<th class="sortable'+(c[2]?' num':'')+'" data-k="'+c[0]+'">'+c[1]+(sortKey===c[0]?(sortDir<0?" ▾":" ▴"):"")+'</th>'; }).join("")+'</tr></thead><tbody>'+
+      rows.map(function(r){
+        var p = r.pct<0 ? "—" : (r.pct*100).toFixed(1)+"%";
+        return '<tr><td>'+esc(r.nombre)+'</td><td class="num mono">'+r.total+'</td><td class="num mono">'+r.ok+'</td><td class="num mono">'+r.no+
+          '</td><td class="num mono">'+(r.pct<0?"":'<span class="bar" style="width:'+Math.round(r.pct*60)+'px"></span>')+p+'</td><td class="num mono">'+(r.meta||"—")+
+          '</td><td class="num mono">'+(r.meta?r.pend:"—")+'</td><td>'+esc(r.tipos||"—")+'</td></tr>'; }).join("")+
+      '<tr><td><b>Total</b></td><td class="num mono"><b>'+tot.t+'</b></td><td class="num mono"><b>'+tot.o+'</b></td><td class="num mono"><b>'+tot.n+
+      '</b></td><td class="num mono"><b>'+(tot.t?pct(tot.o,tot.t).toFixed(1)+"%":"—")+'</b></td><td></td><td></td><td></td></tr></tbody></table>';
+    [].forEach.call($("tblAvance").querySelectorAll("th.sortable"), function(th){
+      th.addEventListener("click", function(){
+        var k=th.getAttribute("data-k"); if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir = (k==="nombre"||k==="tipos")?1:-1; }
+        renderAvanceTable();
+      });
+    });
+  }
+
   function render(){
     if(!DATA) return;
     var f = filtered(), recs = f.recs;
@@ -484,6 +536,10 @@ window.MAT_MS = {
           options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},animation:false}}));
       });
     }
+
+    lastList = list;
+    renderAvanceTable();
+    applyView();
 
     var noImpl = recs.filter(function(r){ return r.impl===0; });
     var gm = {};
@@ -619,6 +675,10 @@ window.MAT_MS = {
   /* ───────── arranque ───────── */
   msMat = msBuild($("msMat"),"Material", function(s){ sel.mat=s; render(); });
   msCad = msBuild($("msCad"),"Cadena", function(s){ sel.cad=s; render(); });
+  $("viewSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-v]"); if(!b) return;
+    view = b.getAttribute("data-v"); applyView();
+  });
   $("fMes").addEventListener("change", function(){ setMonthDates($("fMes").value); render(); });
   ["fAlcance","fZona","fDesde","fHasta"].forEach(function(id){ $(id).addEventListener("change", render); });
 
