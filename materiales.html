@@ -243,7 +243,8 @@ window.MAT_MS = {
   var CATS = [
     ["Sin stock / no llegó el material", /no lleg|sin stock|stock|agot|falt[oa] (el )?material|sin material|no hay material|no tienen material/],
     ["Local no permitió / sin autorización", /no permit|no autoriz|no dej|admin|encargad|gerente|supervisor|prohib|no quiso|rechaz|no esta en (su|la) (relacion|lista)|no estoy en|chaleco|casco|epp/],
-    ["Local cerrado / mantenimiento / auditoría", /cerrad|mantenim|repar|remodel|en auditor|local en|clausur|dejo de funcionar|no cuentan con tienda/],
+    ["Local cerrado / mantenimiento / auditoría", /cerrad|mantenim|repar|remodel|en auditor|local en|clausur|dejo de funcionar|no cuentan con tienda|inventario/],
+    ["Staff ocupado / counter con comida", /ocupad|comida|no se visito/],
     ["Material dañado / caído", /danad|caid|roto|deterior|mal estado|se cay/],
     ["No aplica / sin espacio o mueble", /no aplica|espacio|no corresponde|sin mueble|no cuenta con|no tiene (el )?mueble|no hay (el )?mueble/],
     ["Cambio o reemplazo por otro material", /se cambi|cambio|reempl|por el velo|por otro/]
@@ -258,8 +259,9 @@ window.MAT_MS = {
     var p = f.split(/\s+-\s+/)[0].trim().toUpperCase();
     return p.length>24 ? p.slice(0,24) : p;
   }
-  function zonaDe(type, region){
-    var r = norm(region);
+  function zonaDe(type, region, ubigeo){
+    // en los queries "region" viene vacío para muchas tiendas KACC de Lima; ahí el departamento está en "ubigeo"
+    var r = norm(region) || norm(ubigeo);
     if(r==="lima" || r==="callao" || r==="lima metropolitana") return "LIMA";
     return /kacc/i.test(String(type||"")) ? "KC" : "NKC";
   }
@@ -284,7 +286,7 @@ window.MAT_MS = {
     var col = {}; head.forEach(function(h,i){ if(!(h in col)) col[h]=i; });
     function ci(n){ return col[n]!==undefined ? col[n] : -1; }
     var iStore=ci("store_id"), iName=ci("fullname"), iType=ci("type"), iReg=ci("region"), iDist=ci("district"),
-        iAud=ci("auditor"), iFecha=ci("fecha");
+        iAud=ci("auditor"), iFecha=ci("fecha"), iUbi=ci("ubigeo");
     if(iStore<0||iFecha<0) return {error:"Faltan las columnas store_id / fecha."};
 
     var mats = {}, groups = {};
@@ -309,7 +311,7 @@ window.MAT_MS = {
       var base = {
         fecha:fecha, mes: fecha.getFullYear()+"-"+pad(fecha.getMonth()+1),
         store:store, tienda:clean(row[iName]), cadena:cadenaDe(row[iName]),
-        zona:zonaDe(row[iType], row[iReg]), distrito:clean(row[iDist]), promotor:clean(row[iAud])
+        zona:zonaDe(row[iType], row[iReg], row[iUbi]), distrito:clean(row[iDist]), promotor:clean(row[iAud])
       };
       var any = false;
       for(var k=0;k<ids.length;k++){
@@ -342,21 +344,25 @@ window.MAT_MS = {
     var rows = XLSX.utils.sheet_to_json(wb.Sheets[best],{header:1,defval:"",raw:true,blankrows:false});
     var head = rows[0].map(String);
     function find(re){ for(var i=0;i<head.length;i++) if(re.test(head[i])) return i; return -1; }
-    var iF=head.indexOf("fecha"), iN=head.indexOf("fullname"), iT=head.indexOf("type"), iR=head.indexOf("region"),
+    var iF=head.indexOf("fecha"), iN=head.indexOf("fullname"), iT=head.indexOf("type"), iR=head.indexOf("region"), iU=head.indexOf("ubigeo"),
         iA=head.indexOf("auditor"), iS=head.indexOf("store_id"),
         iAb=head.findIndex(function(c){ return /^local-abierto$/i.test(c); }),
-        iCom=find(/COMENTARIOS CONCATENADOS/i), iOtro=head.indexOf("otro");
-    var opIdx=[]; head.forEach(function(h,i){ if(/-OPCION$/i.test(h)||/_comentario$/i.test(h)) opIdx.push(i); });
+        // columnas reales de 582-INFORMACIÓN GENERAL: "¿Permitió realizar auditoría en counter?" (1/0),
+        // local-abierto-OPCION / ...counter?-OPCION (motivo elegido) y COMENTARIO_OPCION (texto libre si eligió "Otro motivo")
+        iPer=head.findIndex(function(c){ return /permiti/i.test(c) && !/-(OPCION|FOTO)$/i.test(c) && !/_comentario$/i.test(c); }),
+        iOpAb=head.findIndex(function(c){ return /^local-abierto-OPCION$/i.test(c); }),
+        iOpPer=head.findIndex(function(c){ return /permiti/i.test(c) && /-OPCION$/i.test(c); }),
+        iComOp=head.findIndex(function(c){ return /^COMENTARIO_OPCION$/i.test(c); });
+    function txt(row,i){ var v=i>=0?clean(row[i]):""; return (v==="null"||v==="0"||/^https?:/i.test(v))?"":v; }
     var recs=[];
     for(var r=1;r<rows.length;r++){
       var row=rows[r]; var f=parseDate(row[iF]); if(!f) continue;
-      var abierto = clean(row[iAb]);
-      if(abierto!=="0") continue;
-      var motivo = iCom>=0 ? clean(row[iCom]) : "";
-      if(!motivo && iOtro>=0) motivo = clean(row[iOtro]);
-      for(var q=0;q<opIdx.length && !motivo;q++){ var v=clean(row[opIdx[q]]); if(v && !/^https?:/i.test(v) && v!=="null") motivo=v; }
+      var abierto = clean(row[iAb]), per = iPer>=0 ? clean(row[iPer]) : "1";
+      if(abierto==="1" && per!=="0") continue;     // visita efectiva: no entra a la tabla de motivos
+      var motivo = abierto==="0" ? txt(row,iOpAb) : txt(row,iOpPer);
+      if(!motivo || /^otro/i.test(motivo)) motivo = txt(row,iComOp) || motivo;
       recs.push({ fecha:f, store:clean(row[iS]), tienda:clean(row[iN]), cadena:cadenaDe(row[iN]),
-        zona:zonaDe(row[iT],row[iR]), promotor:clean(row[iA]), motivo:motivo });
+        zona:zonaDe(row[iT],row[iR],row[iU]), promotor:clean(row[iA]), motivo:motivo });
     }
     return { recs:recs };
   }

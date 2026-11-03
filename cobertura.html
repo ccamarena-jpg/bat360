@@ -187,8 +187,10 @@ window.COB_MS = {
   padUrl:   "https://ttauditperu-my.sharepoint.com/:x:/g/personal/acastro_ttauditperu_onmicrosoft_com/IQCMw-AHmgwHQoMO0AV4UU4TAUqoAgk0rnzdVjQLg5T23SI?e=FbLrNF",
   infoUrl:  "https://ttauditperu-my.sharepoint.com/:x:/g/personal/acastro_ttauditperu_onmicrosoft_com/IQDl5lLllIOWT74Z3_Ou_6muAZ4PxqwmXMyiqtVAl8TDU-Y?e=x6bLbV"
 };
-/* Semana de referencia: la semana que empieza el lunes 2/11/2026 es Q1; las siguientes alternan Q2, Q1, Q2… */
-window.COB_REF_Q1 = "2026-11-02";
+/* Semana de referencia (lunes de una semana Q1); las demás alternan Q2, Q1, Q2…
+   Verificado con los datos reales de 582-INFORMACIÓN GENERAL: las tiendas QUINCENAL 1 se visitan en las semanas
+   del 14/9, 28/9, 12/10 y 26/10; las QUINCENAL 2 en 7/9, 21/9, 5/10, 19/10 y 2/11. Por eso la semana del 2/11 es Q2. */
+window.COB_REF_Q1 = "2026-10-26";
 </script>
 <script>
 (function(){
@@ -286,17 +288,25 @@ window.COB_REF_Q1 = "2026-11-02";
     function find(re){ for(var i=0;i<head.length;i++) if(re.test(head[i])) return i; return -1; }
     var iS=head.indexOf("store_id"), iF=head.indexOf("fecha"), iA=head.indexOf("auditor"),
         iAb=head.findIndex(function(c){return /^local-abierto$/i.test(c);}),
-        iCom=find(/COMENTARIOS CONCATENADOS/i), iOtro=head.indexOf("otro");
-    var opIdx=[]; head.forEach(function(h,i){ if(/-OPCION$/i.test(h)||/_comentario$/i.test(h)) opIdx.push(i); });
+        // columnas reales de 582-INFORMACIÓN GENERAL: local-abierto (1/0), "¿Permitió realizar auditoría en counter?" (1/0),
+        // local-abierto-OPCION / ...counter?-OPCION (motivo elegido) y COMENTARIO_OPCION (texto libre si eligió "Otro motivo")
+        iPer=head.findIndex(function(c){return /permiti/i.test(c) && !/-(OPCION|FOTO)$/i.test(c) && !/_comentario$/i.test(c);}),
+        iOpAb=head.findIndex(function(c){return /^local-abierto-OPCION$/i.test(c);}),
+        iOpPer=head.findIndex(function(c){return /permiti/i.test(c) && /-OPCION$/i.test(c);}),
+        iComOp=head.findIndex(function(c){return /^COMENTARIO_OPCION$/i.test(c);});
+    function txt(row,i){ var v=i>=0?clean(row[i]):""; return (v==="null"||v==="0"||/^https?:/i.test(v))?"":v; }
     var visits=[], by={};
     for(var r=1;r<rows.length;r++){
       var row=rows[r], f=parseDate(row[iF]); if(!f) continue;
       var store=clean(row[iS]); if(!store) continue;
-      var ab=clean(row[iAb]);
-      var motivo = iCom>=0 ? clean(row[iCom]) : "";
-      if(!motivo && iOtro>=0) motivo=clean(row[iOtro]);
-      for(var q=0;q<opIdx.length && !motivo;q++){ var v=clean(row[opIdx[q]]); if(v && !/^https?:/i.test(v) && v!=="null") motivo=v; }
-      var vis={store:store,fecha:f,promotor:clean(row[iA]),abierto:(ab==="1"),motivo:motivo};
+      var ab=clean(row[iAb]), per=iPer>=0?clean(row[iPer]):"1";
+      var efectiva = (ab==="1" && per!=="0");
+      var motivo="";
+      if(!efectiva){
+        motivo = ab==="0" ? txt(row,iOpAb) : txt(row,iOpPer);
+        if(!motivo || /^otro/i.test(motivo)) motivo = txt(row,iComOp) || motivo;
+      }
+      var vis={store:store,fecha:f,promotor:clean(row[iA]),abierto:(ab==="1"),efectiva:efectiva,motivo:motivo};
       visits.push(vis); (by[store]||(by[store]=[])).push(vis);
     }
     return { visits:visits, byStore:by };
@@ -306,7 +316,7 @@ window.COB_REF_Q1 = "2026-11-02";
   var CATS=[
     ["Local no permitió / sin autorización",/no permit|no autoriz|no dej|admin|encargad|gerente|supervisor|prohib|chaleco|casco|epp|no estoy en|no esta en/],
     ["Local cerrado / mantenimiento / auditoría",/cerrad|mantenim|repar|remodel|en auditor|local en|clausur|dejo de funcionar|no cuentan con tienda/],
-    ["Staff ocupado / sin encargado",/ocupad|no se encontro|no habia/]
+    ["Staff ocupado / counter con comida",/ocupad|no se encontro|no habia|comida|no se visito/]
   ];
   function categoria(t){ t=norm(t); if(!t) return "Sin motivo registrado"; for(var i=0;i<CATS.length;i++) if(CATS[i][1].test(t)) return CATS[i][0]; return "Otros motivos"; }
 
@@ -346,10 +356,10 @@ window.COB_REF_Q1 = "2026-11-02";
       p.visitas=vs;
       if(vs.length){
         var mismo=vs.some(function(v){ return ymd(v.fecha)===ymd(p.fecha); });
-        var ef=vs.some(function(v){ return v.abierto; });
+        var ef=vs.some(function(v){ return v.efectiva; });
         p.estado = mismo ? "mismo" : "otro";
         p.efectiva = ef;
-        p.motivo = ef ? "" : (vs[0].motivo||"");
+        p.motivo = ef ? "" : (vs.filter(function(v){return v.motivo;})[0]||{motivo:""}).motivo;
       } else {
         p.estado = p.fecha>today ? "pend" : "nocub";
       }
