@@ -54,6 +54,7 @@ input[type=file]{display:none;}
   border:1px solid var(--border); border-radius:12px; padding:12px 16px; box-shadow:var(--shadow); margin-bottom:10px;}
 .filter-field{display:flex; flex-direction:column; gap:4px;}
 .filter-field label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:600;}
+.filter-field input[type=date]{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text); min-width:140px;}
 .filter-field select{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px;
   border:1px solid var(--border); background:var(--bg); color:var(--text); min-width:150px;}
 .filter-field input[type=search]{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);}
@@ -134,6 +135,8 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
 <div id="app" hidden>
   <div class="filter-bar">
     <div class="filter-field"><label for="fSemana">Semana</label><select id="fSemana"></select></div>
+    <div class="filter-field"><label for="fDesde">Desde</label><input type="date" id="fDesde"></div>
+    <div class="filter-field"><label for="fHasta">Hasta</label><input type="date" id="fHasta"></div>
     <div class="filter-field"><label for="fVig">Columnas del padrón</label><select id="fVig"></select></div>
     <div class="filter-field"><label>Promotor</label><div class="ms" id="msPro"></div></div>
     <div class="filter-field"><label>Cadena</label><div class="ms" id="msCad"></div></div>
@@ -360,6 +363,22 @@ window.COB_REF_Q1 = "2026-10-26";
     });
     return list;
   }
+  /* rango de fechas: por defecto la semana elegida; "Desde/Hasta" permiten un día, varias semanas, etc. */
+  var MAX_SEM=8;
+  function setRangeFromWeek(){
+    var m=new Date($("fSemana").value+"T00:00:00");
+    $("fDesde").value=ymd(m); $("fHasta").value=ymd(addDays(m,6));
+  }
+  function rango(){
+    var wk=new Date($("fSemana").value+"T00:00:00");
+    var d1=$("fDesde").value? new Date($("fDesde").value+"T00:00:00") : wk;
+    var d2=$("fHasta").value? new Date($("fHasta").value+"T00:00:00") : addDays(wk,6);
+    if(d2<d1){ var t=d1; d1=d2; d2=t; }
+    var ms=[], m=mondayOf(d1), last=mondayOf(d2), trunc=false;
+    while(m<=last){ if(ms.length>=MAX_SEM){ trunc=true; break; } ms.push(m); m=addDays(m,7); }
+    if(trunc) d2=addDays(ms[ms.length-1],6);
+    return { d1:d1, d2:d2, mondays:ms, truncada:trunc };
+  }
   function filterRow(p){
     var zona=$("fZona").value;
     if(zona && p.r.zona!==zona) return false;
@@ -372,6 +391,7 @@ window.COB_REF_Q1 = "2026-10-26";
     var domingo=addDays(monday,6);
     var prog=programacion(monday).filter(filterRow);
     prog.forEach(function(p){
+      p.monday=monday;
       var vs=(INFO && INFO.byStore[p.r.store] || []).filter(function(v){ return v.fecha>=monday && v.fecha<=domingo; });
       p.visitas=vs;
       if(vs.length){
@@ -395,9 +415,13 @@ window.COB_REF_Q1 = "2026-10-26";
   function semaforo(p){ return p>=90?"ok":p>=70?"warn":"crit"; }
   function render(){
     if(!PAD) return;
-    var monday=new Date($("fSemana").value+"T00:00:00");
-    var prog=evaluar(monday), q=weekQ(monday);
-    $("filterHint").textContent="Semana del "+ymd(monday)+" al "+ymd(addDays(monday,6))+" · "+q+" (QUINCENAL "+q.slice(1)+" toca esta semana; SEMANAL toca siempre). "+
+    var rg=rango(), prog=[], qs=[];
+    rg.mondays.forEach(function(m){
+      qs.push(ymd(m).slice(5)+" "+weekQ(m));
+      evaluar(m).forEach(function(p){ if(p.fecha>=rg.d1 && p.fecha<=rg.d2) prog.push(p); });
+    });
+    $("filterHint").textContent="Del "+ymd(rg.d1)+" al "+ymd(rg.d2)+" · "+(rg.mondays.length>1? rg.mondays.length+" semanas (lunes y quincena: "+qs.join(", ")+")" : "semana "+qs[0]+" (la QUINCENAL de esa quincena toca; SEMANAL toca siempre)")+". "+
+      (rg.truncada? "Rango limitado a "+MAX_SEM+" semanas. " : "")+
       (INFO? "" : "Falta cargar Información General: todo aparece como no cubierto/pendiente. ");
     if(view==="cal") { renderCal(prog); reportHeight(); return; }
 
@@ -470,12 +494,18 @@ window.COB_REF_Q1 = "2026-10-26";
   }
 
   function renderCal(prog){
+    if(!prog.length){ $("tblCal").innerHTML='<div class="empty">No hay tiendas programadas con los filtros actuales.</div>'; return; }
+    var weeks={}; prog.forEach(function(p){ (weeks[ymd(p.monday)]||(weeks[ymd(p.monday)]=[])).push(p); });
+    $("tblCal").innerHTML = Object.keys(weeks).sort().map(function(k){
+      var m=new Date(k+"T00:00:00");
+      return '<div style="padding:10px 12px 4px;font-weight:600;font-size:13px">Semana del '+ymd(m)+' · '+weekQ(m)+'</div>'+calTable(weeks[k], m);
+    }).join("");
+  }
+  function calTable(prog, monday){
     var by={};
     prog.forEach(function(p){ var g=by[p.promotor]||(by[p.promotor]=[[],[],[],[],[],[]]); if(p.di<6) g[p.di].push(p); });
     var ks=Object.keys(by).sort();
-    if(!ks.length){ $("tblCal").innerHTML='<div class="empty">No hay tiendas programadas con los filtros actuales.</div>'; return; }
-    var monday=new Date($("fSemana").value+"T00:00:00");
-    $("tblCal").innerHTML='<table class="cal"><thead><tr><th>Promotor</th>'+DIAS_T.map(function(d,i){ return '<th>'+d+' '+ymd(addDays(monday,i)).slice(8)+'</th>'; }).join("")+'<th class="num">Total</th></tr></thead><tbody>'+
+    return '<table class="cal"><thead><tr><th>Promotor</th>'+DIAS_T.map(function(d,i){ return '<th>'+d+' '+ymd(addDays(monday,i)).slice(8)+'</th>'; }).join("")+'<th class="num">Total</th></tr></thead><tbody>'+
       ks.map(function(k){
         var tot=0;
         var cells=by[k].map(function(arr){
@@ -519,7 +549,9 @@ window.COB_REF_Q1 = "2026-10-26";
     else { // última semana con datos (si hay), si no la actual
       var withData=INFO? ymd(mondayOf(INFO.visits.reduce(function(a,v){return v.fecha>a?v.fecha:a;},new Date(2000,0,1)))) : ymd(mondayOf(new Date()));
       $("fSemana").value = ws.indexOf(withData)!==-1 ? withData : ws[0];
+      setRangeFromWeek();
     }
+    if(!$("fDesde").value || !$("fHasta").value) setRangeFromWeek();
     if(PAD){
       var curV=$("fVig").value;
       $("fVig").innerHTML=PAD.labels.map(function(l,i){ return '<option value="'+i+'">'+esc(l)+'</option>'; }).join("");
@@ -549,7 +581,8 @@ window.COB_REF_Q1 = "2026-10-26";
   $("viewSeg").addEventListener("click",function(e){ var b=e.target.closest("button[data-v]"); if(!b) return; view=b.getAttribute("data-v");
     [].forEach.call($("viewSeg").querySelectorAll("button"),function(x){ x.classList.toggle("on",x===b); });
     $("vCob").hidden=view!=="cob"; $("vCal").hidden=view!=="cal"; render(); });
-  ["fSemana","fVig","fZona"].forEach(function(id){ $(id).addEventListener("change",render); });
+  $("fSemana").addEventListener("change",function(){ setRangeFromWeek(); render(); });
+  ["fVig","fZona","fDesde","fHasta"].forEach(function(id){ $(id).addEventListener("change",render); });
   $("qTienda").addEventListener("input",function(){ renderTiendas(); });
   $("qEstado").addEventListener("change",function(){ renderTiendas(); });
 
