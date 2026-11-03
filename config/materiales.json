@@ -1,0 +1,22 @@
+{
+  "_ayuda": "Un bloque por mes (clave AAAA-MM). 'materiales' lista los ids de material (el número después de 'id:' en el nombre de columna del Excel 582-EJECUCIÓN-POP) que se miden ese mes. 'meta' (opcional) = tiendas objetivo del material; si se informa, el gráfico muestra la porción 'Pendiente'. Si 'materiales' está vacío, la vista muestra todos los materiales con registros ese mes. No se borran meses anteriores: así se conserva el histórico.",
+  "meses": {
+    "2026-11": {
+      "nombre": "Noviembre 2026",
+      "materiales": [
+        { "id": 7929, "nombre": "TABLE TENT LS CORE NOVIEMBRE" },
+        { "id": 7930, "nombre": "STICKER MESON LS CORE NOVIEMBRE" },
+        { "id": 7931, "nombre": "VIBRIN LS CORE NOVIEMBRE" },
+        { "id": 7932, "nombre": "CARTILLA CONECTADOS LS CORE" }
+      ]
+    },
+    "2026-10": {
+      "nombre": "Octubre 2026",
+      "materiales": []
+    },
+    "2026-09": {
+      "nombre": "Septiembre 2026",
+      "materiales": []
+    }
+  }
+}
