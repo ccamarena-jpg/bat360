@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cobertura · BAT 360</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6fa; --surface:#FFFFFF; --surface-2:#f2f5fa; --text:#1b2a47; --text-muted:#6c7a92; --border:#dde4ee;
+  --accent:#1d3b78; --accent-soft:#e2ecfb; --ok:#1f9d57; --ok-bg:#e0f5e8; --warn:#a9760a; --warn-bg:#fcf0d6;
+  --crit:#d6453d; --crit-bg:#fbe3e1; --pend:#b7c0cf; --pend-bg:#eef1f6;
+  --shadow: 0 1px 3px rgba(21,38,74,.06), 0 4px 14px rgba(21,38,74,.05);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181A; --surface:#1F2224; --surface-2:#26292B; --text:#EDEBE5; --text-muted:#9C9A92; --border:#33363A;
+    --accent:#7FB4D4; --accent-soft:#20343E; --ok:#6FCB99; --ok-bg:#173425; --warn:#E3B15C; --warn-bg:#3A2C10;
+    --crit:#EF8A83; --crit-bg:#3D1E1C; --pend:#5b6270; --pend-bg:#2a2e33; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181A; --surface:#1F2224; --surface-2:#26292B; --text:#EDEBE5; --text-muted:#9C9A92; --border:#33363A;
+  --accent:#7FB4D4; --accent-soft:#20343E; --ok:#6FCB99; --ok-bg:#173425; --warn:#E3B15C; --warn-bg:#3A2C10;
+  --crit:#EF8A83; --crit-bg:#3D1E1C; --pend:#5b6270; --pend-bg:#2a2e33; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;}
+body{background:var(--bg); color:var(--text); font-family:"IBM Plex Sans",'Segoe UI',system-ui,sans-serif;
+  padding-inline:18px; padding-block:14px 28px; max-width:1180px; margin:0 auto;}
+.mono{font-family:"IBM Plex Mono", ui-monospace, monospace; font-variant-numeric:tabular-nums;}
+h1,h2,h3{text-wrap:balance; margin:0;}
+a{color:var(--accent);}
+header.top{display:flex; flex-wrap:wrap; gap:16px 24px; justify-content:space-between; align-items:flex-start;
+  padding-bottom:18px; border-bottom:1px solid var(--border); margin-bottom:18px;}
+.brand{display:flex; flex-direction:column; gap:4px; min-width:220px;}
+.brand .eyebrow{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-muted); font-weight:600;}
+.brand h1{font-size:26px; font-weight:700;}
+.brand p{margin:2px 0 0; color:var(--text-muted); font-size:13.5px; max-width:54ch;}
+.upload-panel{display:flex; flex-direction:column; gap:8px; background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:14px 16px; box-shadow:var(--shadow); min-width:280px; flex:1 1 320px; max-width:460px;}
+.upload-row{display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+.btn{background:var(--accent); color:var(--surface); border:none; border-radius:8px; padding:9px 14px;
+  font-family:inherit; font-weight:600; font-size:13.5px; cursor:pointer;}
+.btn.ghost{background:transparent; color:var(--accent); border:1px solid var(--accent);}
+.btn:hover{filter:brightness(1.06);}
+.file-name{font-size:12.5px; color:var(--text-muted); word-break:break-all;}
+input[type=file]{display:none;}
+.status-line{font-size:12.5px; color:var(--text-muted);}
+.status-line.err{color:var(--crit);} .status-line.ok{color:var(--ok);}
+.empty-banner{display:flex; gap:10px; align-items:center; background:var(--accent-soft); color:var(--accent);
+  border:1px solid var(--accent); border-radius:10px; padding:12px 16px; font-size:13.5px; margin-bottom:20px;}
+.filter-bar{display:flex; flex-wrap:wrap; gap:12px 16px; align-items:flex-end; background:var(--surface);
+  border:1px solid var(--border); border-radius:12px; padding:12px 16px; box-shadow:var(--shadow); margin-bottom:10px;}
+.filter-field{display:flex; flex-direction:column; gap:4px;}
+.filter-field label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:600;}
+.filter-field select{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px;
+  border:1px solid var(--border); background:var(--bg); color:var(--text); min-width:150px;}
+.filter-hint{font-size:12px; color:var(--text-muted); margin:0 0 16px;}
+.ms{position:relative;}
+.ms-btn{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--bg); color:var(--text); min-width:200px; text-align:left; cursor:pointer; display:flex; gap:8px; align-items:center;}
+.ms-btn .caret{margin-left:auto; color:var(--text-muted);}
+.ms-panel{position:absolute; z-index:30; top:calc(100% + 4px); left:0; min-width:260px; max-height:320px; overflow:auto;
+  background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:var(--shadow); padding:6px;}
+.ms-panel label{display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; font-size:13px; cursor:pointer; font-weight:500; text-transform:none; letter-spacing:0; color:var(--text);}
+.ms-panel label:hover{background:var(--surface-2);}
+.ms-panel .ms-sep{height:1px; background:var(--border); margin:5px 2px;}
+.ms-panel input[type=checkbox]{margin:0; accent-color:var(--accent);}
+.seg{display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface); margin-bottom:14px;}
+.seg button{font-family:inherit; font-size:12.5px; font-weight:600; padding:7px 14px; border:none; background:transparent; color:var(--text-muted); cursor:pointer;}
+.seg button.on{background:var(--accent); color:var(--surface);}
+.kpi-strip{display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:12px; margin-bottom:22px;}
+.kpi{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow);}
+.kpi .k-label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); font-weight:600;}
+.kpi .k-value{font-size:26px; font-weight:700; margin-top:4px;}
+.kpi .k-sub{font-size:12px; color:var(--text-muted); margin-top:2px;}
+section.block{margin-bottom:26px;}
+section.block h2{font-size:17px; margin-bottom:4px;}
+section.block .sub{font-size:12.5px; color:var(--text-muted); margin:0 0 12px;}
+.table-wrap{background:var(--surface); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); overflow:auto; max-height:560px;}
+table{border-collapse:collapse; width:100%; font-size:13px;}
+th,td{padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); vertical-align:top;}
+th{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); background:var(--surface-2); position:sticky; top:0;}
+td.num, th.num{text-align:right;}
+tr:last-child td{border-bottom:none;}
+.pill{display:inline-block; padding:2px 8px; border-radius:999px; font-size:11.5px; font-weight:600;}
+.pill.ok{background:var(--ok-bg); color:var(--ok);} .pill.crit{background:var(--crit-bg); color:var(--crit);} .pill.warn{background:var(--warn-bg); color:var(--warn);} .pill.pend{background:var(--pend-bg); color:var(--text-muted);}
+.bar{display:inline-block; height:8px; border-radius:4px; vertical-align:middle; margin-right:6px;}
+.two-col{display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:16px;}
+.cal td{min-width:130px; font-size:12px;}
+.cal td.cell{border-left:1px solid var(--border);}
+.cal .cnt{font-weight:700; font-size:14px;}
+.cal .dst{color:var(--text-muted); font-size:11.5px; line-height:1.4; margin-top:2px;}
+.cal .st-ok{background:var(--ok-bg);} .cal .st-bad{background:var(--crit-bg);} .cal .st-mix{background:var(--warn-bg);} .cal .st-pend{background:var(--pend-bg);}
+.empty{padding:18px; color:var(--text-muted); font-size:13px;}
+footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--border); padding-top:12px; margin-top:24px;}
+[hidden]{display:none !important;}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <span class="eyebrow">BAT 360 · Promotoría</span>
+    <h1>Cobertura y calendario</h1>
+    <p>Cruza el <b>padrón</b> (promotor, día de visita, frecuencia Q1/Q2) con <b>Información General</b> (lo que el promotor sí visitó) para medir cobertura y ver la programación semanal.</p>
+  </div>
+  <div class="upload-panel">
+    <div class="upload-row" id="msRow" hidden>
+      <button class="btn" id="msConnectBtn" type="button">🔗 Conectar con SharePoint</button>
+      <button class="btn ghost" id="msRefreshBtn" type="button" hidden>↻ Actualizar</button>
+      <span class="file-name" id="msUser"></span>
+    </div>
+    <div class="upload-row">
+      <label class="btn ghost" for="padInput">📂 Cargar Padrón</label>
+      <input type="file" id="padInput" accept=".xlsx,.xlsm,.xls">
+      <label class="btn ghost" for="infoInput">📂 Cargar Información General</label>
+      <input type="file" id="infoInput" accept=".xlsx,.xlsm,.xls">
+    </div>
+    <div class="file-name" id="fileName">Sin archivos cargados</div>
+    <div class="status-line" id="statusLine"></div>
+  </div>
+</header>
+
+<div class="empty-banner" id="emptyBanner">
+  <span>🧭</span>
+  <span>Conecta con SharePoint, o carga el <b>Padrón de promotoría</b> y el Excel <b>582-INFORMACIÓN GENERAL</b>, para ver cobertura y calendario.</span>
+</div>
+
+<div id="app" hidden>
+  <div class="filter-bar">
+    <div class="filter-field"><label for="fSemana">Semana</label><select id="fSemana"></select></div>
+    <div class="filter-field"><label for="fVig">Columnas del padrón</label><select id="fVig"></select></div>
+    <div class="filter-field"><label>Promotor</label><div class="ms" id="msPro"></div></div>
+    <div class="filter-field"><label>Cadena</label><div class="ms" id="msCad"></div></div>
+    <div class="filter-field"><label for="fZona">Zona</label>
+      <select id="fZona"><option value="">Todas</option><option>LIMA</option><option>KC</option><option>NKC</option></select></div>
+  </div>
+  <p class="filter-hint" id="filterHint"></p>
+
+  <div class="seg" id="viewSeg" role="group" aria-label="Vista">
+    <button type="button" data-v="cob" class="on">📊 Cobertura</button>
+    <button type="button" data-v="cal">🗓️ Calendario semanal</button>
+  </div>
+
+  <div id="vCob">
+    <div class="kpi-strip" id="kpis"></div>
+    <section class="block">
+      <h2>Cobertura por promotor</h2>
+      <p class="sub">Programadas = tiendas que le tocan esa semana según día y frecuencia. <b>Cubierta</b> = hubo visita a la tienda en la semana (mismo día o en otro día). Las de días que aún no llegan quedan como pendientes.</p>
+      <div class="table-wrap" id="tblPromotor"></div>
+    </section>
+    <section class="block two-col">
+      <div>
+        <h2>Motivos de no efectividad</h2>
+        <p class="sub">Visitas hechas pero con local cerrado o sin permitir la promotoría.</p>
+        <div class="table-wrap" id="tblMotivos"></div>
+      </div>
+      <div>
+        <h2>No cubiertas</h2>
+        <p class="sub" id="ncSub"></p>
+        <div class="table-wrap" id="tblNoCub"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="vCal" hidden>
+    <section class="block">
+      <h2>Programación de la semana</h2>
+      <p class="sub">Por promotor y día: cuántas tiendas le tocan y en qué distritos. Colores: verde = todo cubierto, rojo = nada cubierto, ámbar = parcial, gris = día pendiente.</p>
+      <div class="table-wrap" id="tblCal"></div>
+    </section>
+  </div>
+</div>
+
+<footer>Los archivos se leen en tu navegador con tu cuenta de Microsoft; no se guardan en la plataforma.</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
+<script>
+/* Conexión en vivo con SharePoint (Graph). Misma app "bat360" de Entra que radar.html y materiales.html.
+   Hay que registrar https://bat360.vercel.app/cobertura.html como Redirect URI (plataforma SPA). */
+window.COB_MS = {
+  clientId: "2dd44541-d3ac-459c-afa0-aa873590f7e0",
+  tenant:   "9d85a34e-57e5-4f82-9341-7dd9300077b7",
+  scopes:   ["Files.Read.All"],
+  padUrl:   "https://ttauditperu-my.sharepoint.com/:x:/g/personal/acastro_ttauditperu_onmicrosoft_com/IQCMw-AHmgwHQoMO0AV4UU4TAUqoAgk0rnzdVjQLg5T23SI?e=FbLrNF",
+  infoUrl:  "https://ttauditperu-my.sharepoint.com/:x:/g/personal/acastro_ttauditperu_onmicrosoft_com/IQDl5lLllIOWT74Z3_Ou_6muAZ4PxqwmXMyiqtVAl8TDU-Y?e=x6bLbV"
+};
+/* Semana de referencia: la semana que empieza el lunes 2/11/2026 es Q1; las siguientes alternan Q2, Q1, Q2… */
+window.COB_REF_Q1 = "2026-11-02";
+</script>
+<script>
+(function(){
+  "use strict";
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function norm(s){ return String(s==null?"":s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/\s+/g," ").trim(); }
+  function clean(s){ return String(s==null?"":s).replace(/[\u00a0\u2007\u202f\s]+/g," ").trim(); }
+  function pad(n){ return (n<10?"0":"")+n; }
+  function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function pct(a,b){ return b ? Math.round(a*1000/b)/10 : 0; }
+  var MON3 = {ene:0,feb:1,mar:2,abr:3,may:4,jun:5,jul:6,ago:7,sep:8,set:8,oct:9,nov:10,dic:11};
+  var DIAS = ["lunes","martes","miercoles","jueves","viernes","sabado","domingo"];
+  var DIAS_T = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+
+  function parseDate(v){
+    if(v instanceof Date && !isNaN(v)) return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+    if(typeof v==="number" && v>20000 && v<80000){ var d0=new Date(Math.round((v-25569)*864e5)); return new Date(d0.getUTCFullYear(), d0.getUTCMonth(), d0.getUTCDate()); }
+    var s=clean(v); if(!s) return null;
+    var m=/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/.exec(s);
+    if(m){ var y=+m[3]; if(y<100) y+=2000; return new Date(y,+m[2]-1,+m[1]); }
+    m=/^(\d{1,2})-([a-z]{3})[a-z]*-(\d{2,4})$/i.exec(s);
+    if(m && MON3[m[2].toLowerCase()]!==undefined){ var y2=+m[3]; if(y2<100) y2+=2000; return new Date(y2,MON3[m[2].toLowerCase()],+m[1]); }
+    m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s); if(m) return new Date(+m[1],+m[2]-1,+m[3]);
+    return null;
+  }
+  function mondayOf(d){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); return x; }
+  function addDays(d,n){ var x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()+n); return x; }
+  var REF = (function(){ var p=(window.COB_REF_Q1||"2026-11-02").split("-"); return new Date(+p[0],+p[1]-1,+p[2]); })();
+  function weekQ(monday){   // "Q1" | "Q2" según paridad respecto a la semana de referencia
+    var n = Math.round((monday-REF)/(7*864e5));
+    return (((n%2)+2)%2===0) ? "Q1" : "Q2";
+  }
+
+  /* ───────── estado ───────── */
+  var PAD = null;      // { rows:[{store,estacion,distrito,zona,cadena, triples:[{label,promotor,dia,frec}]}], labels:[...] }
+  var INFO = null;     // { visits:[{store,fecha,promotor,abierto,motivo}] , byStore:{store:[visit]} }
+  var sel = { pro:null, cad:null };
+  var view = "cob";
+
+  /* ───────── lectura: padrón ───────── */
+  function headerRow(ws){
+    var ref=ws["!ref"]; if(!ref) return [];
+    var r=XLSX.utils.decode_range(ref);
+    var rows=XLSX.utils.sheet_to_json(ws,{header:1,range:{s:{r:r.s.r,c:r.s.c},e:{r:r.s.r,c:r.e.c}},defval:"",raw:true});
+    return rows[0]||[];
+  }
+  function parsePadron(wb){
+    var best=null, cands=[];
+    wb.SheetNames.forEach(function(sn){
+      var h=headerRow(wb.Sheets[sn]).map(norm);
+      var okH = h.some(function(c){return c.indexOf("codigo tt audit")===0;}) && h.some(function(c){return c.indexOf("frecuencia")===0;});
+      if(okH) cands.push(sn);
+    });
+    if(!cands.length) return {error:"No encontré una hoja de padrón (con CÓDIGO TT AUDIT y FRECUENCIA)."};
+    best = cands.filter(function(s){ return /^bbdd/i.test(s); })[0] || cands[0];
+    var rows=XLSX.utils.sheet_to_json(wb.Sheets[best],{header:1,defval:"",raw:true,blankrows:false});
+    var head=rows[0].map(norm);
+    function idx(f){ for(var i=0;i<head.length;i++) if(f(head[i])) return i; return -1; }
+    var iCod=idx(function(c){return c.indexOf("codigo tt audit")===0;}),
+        iEst=idx(function(c){return c.indexOf("estacion")===0;}),
+        iDis=idx(function(c){return c==="distrito";}),
+        iZon=idx(function(c){return c.indexOf("lima/kc")===0;}),
+        iCad=idx(function(c){return c==="cadenas"||c==="cadena";});
+    // tríos promotor / día / frecuencia por sufijo (mayo, octubre, o sin sufijo)
+    var triples=[];
+    head.forEach(function(h,i){
+      var m=/^promotor(?: (.+))?$/.exec(h); if(!m) return;
+      var suf=m[1]||"";
+      var iD=idx(function(c){ return suf ? c==="dia de visita "+suf : c==="dia de visita"; });
+      var iF=idx(function(c){ return suf ? c==="frecuencia "+suf : c==="frecuencia"; });
+      if(iD>=0 && iF>=0) triples.push({label:suf?suf.toUpperCase():"BASE", iP:i, iD:iD, iF:iF});
+    });
+    if(!triples.length) return {error:"No encontré columnas PROMOTOR / DIA DE VISITA / FRECUENCIA en el padrón."};
+    var out=[];
+    for(var r=1;r<rows.length;r++){
+      var row=rows[r], store=clean(row[iCod]); if(!store) continue;
+      out.push({ store:store, estacion:clean(row[iEst]), distrito:clean(row[iDis]), zona:clean(row[iZon]).toUpperCase(),
+        cadena:clean(row[iCad]).toUpperCase(),
+        t: triples.map(function(t){ return { promotor:clean(row[t.iP]), dia:norm(row[t.iD]), frec:clean(row[t.iF]).toUpperCase() }; }) });
+    }
+    return { rows:out, labels:triples.map(function(t){return t.label;}), sheet:best };
+  }
+
+  /* ───────── lectura: Información General ───────── */
+  function parseInfo(wb){
+    var best=null;
+    for(var i=0;i<wb.SheetNames.length;i++){
+      var h=headerRow(wb.Sheets[wb.SheetNames[i]]).map(String);
+      if(h.indexOf("store_id")!==-1 && h.some(function(c){return /local-abierto/i.test(c);}) && h.indexOf("fecha")!==-1){ best=wb.SheetNames[i]; break; }
+    }
+    if(!best) return {error:"No encontré una hoja de Información General (con store_id, fecha y local-abierto)."};
+    var rows=XLSX.utils.sheet_to_json(wb.Sheets[best],{header:1,defval:"",raw:true,blankrows:false});
+    var head=rows[0].map(String);
+    function find(re){ for(var i=0;i<head.length;i++) if(re.test(head[i])) return i; return -1; }
+    var iS=head.indexOf("store_id"), iF=head.indexOf("fecha"), iA=head.indexOf("auditor"),
+        iAb=head.findIndex(function(c){return /^local-abierto$/i.test(c);}),
+        iCom=find(/COMENTARIOS CONCATENADOS/i), iOtro=head.indexOf("otro");
+    var opIdx=[]; head.forEach(function(h,i){ if(/-OPCION$/i.test(h)||/_comentario$/i.test(h)) opIdx.push(i); });
+    var visits=[], by={};
+    for(var r=1;r<rows.length;r++){
+      var row=rows[r], f=parseDate(row[iF]); if(!f) continue;
+      var store=clean(row[iS]); if(!store) continue;
+      var ab=clean(row[iAb]);
+      var motivo = iCom>=0 ? clean(row[iCom]) : "";
+      if(!motivo && iOtro>=0) motivo=clean(row[iOtro]);
+      for(var q=0;q<opIdx.length && !motivo;q++){ var v=clean(row[opIdx[q]]); if(v && !/^https?:/i.test(v) && v!=="null") motivo=v; }
+      var vis={store:store,fecha:f,promotor:clean(row[iA]),abierto:(ab==="1"),motivo:motivo};
+      visits.push(vis); (by[store]||(by[store]=[])).push(vis);
+    }
+    return { visits:visits, byStore:by };
+  }
+
+  /* ───────── motor de cobertura ───────── */
+  var CATS=[
+    ["Local no permitió / sin autorización",/no permit|no autoriz|no dej|admin|encargad|gerente|supervisor|prohib|chaleco|casco|epp|no estoy en|no esta en/],
+    ["Local cerrado / mantenimiento / auditoría",/cerrad|mantenim|repar|remodel|en auditor|local en|clausur|dejo de funcionar|no cuentan con tienda/],
+    ["Staff ocupado / sin encargado",/ocupad|no se encontro|no habia/]
+  ];
+  function categoria(t){ t=norm(t); if(!t) return "Sin motivo registrado"; for(var i=0;i<CATS.length;i++) if(CATS[i][1].test(t)) return CATS[i][0]; return "Otros motivos"; }
+
+  function currentTriple(){ return +$("fVig").value || 0; }
+  function weeksAvail(){
+    var set={}; if(INFO) INFO.visits.forEach(function(v){ set[ymd(mondayOf(v.fecha))]=1; });
+    set[ymd(mondayOf(new Date()))]=1;
+    return Object.keys(set).sort().reverse();
+  }
+  function programacion(monday){
+    var q=weekQ(monday), ti=currentTriple(), today=new Date(); today.setHours(0,0,0,0);
+    var list=[];
+    PAD.rows.forEach(function(r){
+      var t=r.t[ti]; if(!t || !t.promotor) return;
+      var di=DIAS.indexOf(t.dia); if(di<0) return;
+      var f=t.frec;
+      var toca = f.indexOf("SEMANAL")===0 ? true : f==="QUINCENAL 1" ? q==="Q1" : f==="QUINCENAL 2" ? q==="Q2" :
+                 f.indexOf("MENSUAL")===0 ? (addDays(monday,di).getDate()<=7) : false;
+      if(!toca) return;
+      list.push({ r:r, promotor:t.promotor, di:di, fecha:addDays(monday,di), frec:f });
+    });
+    return list;
+  }
+  function filterRow(p){
+    var zona=$("fZona").value;
+    if(zona && p.r.zona!==zona) return false;
+    if(sel.pro && !sel.pro.has(p.promotor)) return false;
+    if(sel.cad && !sel.cad.has(p.r.cadena)) return false;
+    return true;
+  }
+  function evaluar(monday){
+    var today=new Date(); today.setHours(0,0,0,0);
+    var domingo=addDays(monday,6);
+    var prog=programacion(monday).filter(filterRow);
+    prog.forEach(function(p){
+      var vs=(INFO && INFO.byStore[p.r.store] || []).filter(function(v){ return v.fecha>=monday && v.fecha<=domingo; });
+      p.visitas=vs;
+      if(vs.length){
+        var mismo=vs.some(function(v){ return ymd(v.fecha)===ymd(p.fecha); });
+        var ef=vs.some(function(v){ return v.abierto; });
+        p.estado = mismo ? "mismo" : "otro";
+        p.efectiva = ef;
+        p.motivo = ef ? "" : (vs[0].motivo||"");
+      } else {
+        p.estado = p.fecha>today ? "pend" : "nocub";
+      }
+    });
+    return prog;
+  }
+
+  /* ───────── render ───────── */
+  function kpi(l,v,s){ return '<div class="kpi"><div class="k-label">'+esc(l)+'</div><div class="k-value mono">'+esc(v)+'</div><div class="k-sub">'+esc(s)+'</div></div>'; }
+  function semaforo(p){ return p>=90?"ok":p>=70?"warn":"crit"; }
+  function render(){
+    if(!PAD) return;
+    var monday=new Date($("fSemana").value+"T00:00:00");
+    var prog=evaluar(monday), q=weekQ(monday);
+    $("filterHint").textContent="Semana del "+ymd(monday)+" al "+ymd(addDays(monday,6))+" · "+q+" (QUINCENAL "+q.slice(1)+" toca esta semana; SEMANAL toca siempre). "+
+      (INFO? "" : "Falta cargar Información General: todo aparece como no cubierto/pendiente. ");
+    if(view==="cal") { renderCal(prog); reportHeight(); return; }
+
+    var vencidas=prog.filter(function(p){return p.estado!=="pend";}), cub=vencidas.filter(function(p){return p.estado!=="nocub";});
+    var efect=cub.filter(function(p){return p.efectiva;}), pend=prog.length-vencidas.length;
+    $("kpis").innerHTML =
+      kpi("Programadas", prog.length.toLocaleString("es-PE"), "tiendas que tocan esta semana") +
+      kpi("Cobertura", vencidas.length? pct(cub.length,vencidas.length).toFixed(1)+"%":"—", cub.length+" de "+vencidas.length+" vencidas") +
+      kpi("Efectividad", cub.length? pct(efect.length,cub.length).toFixed(1)+"%":"—", efect.length+" de "+cub.length+" visitas con local abierto") +
+      kpi("No cubiertas", (vencidas.length-cub.length).toLocaleString("es-PE"), "sin visita registrada") +
+      kpi("Pendientes", pend.toLocaleString("es-PE"), "días que aún no llegan");
+
+    var byP={};
+    prog.forEach(function(p){ var g=byP[p.promotor]||(byP[p.promotor]={n:0,v:0,c:0,e:0,otro:0,pend:0}); g.n++;
+      if(p.estado==="pend") g.pend++; else { g.v++; if(p.estado!=="nocub"){ g.c++; if(p.estado==="otro") g.otro++; if(p.efectiva) g.e++; } } });
+    var pk=Object.keys(byP).sort(function(a,b){ return pct(byP[a].c,byP[a].v)-pct(byP[b].c,byP[b].v) || a.localeCompare(b); });
+    $("tblPromotor").innerHTML = !pk.length? '<div class="empty">No hay tiendas programadas con los filtros actuales.</div>' :
+      '<table><thead><tr><th>Promotor</th><th class="num">Programadas</th><th class="num">Vencidas</th><th class="num">Cubiertas</th><th class="num">No cubiertas</th><th class="num">En otro día</th><th class="num">Efectivas</th><th class="num">Pendientes</th><th>Cobertura</th></tr></thead><tbody>'+
+      pk.map(function(k){ var g=byP[k], c=pct(g.c,g.v);
+        return '<tr><td>'+esc(k)+'</td><td class="num mono">'+g.n+'</td><td class="num mono">'+g.v+'</td><td class="num mono">'+g.c+'</td><td class="num mono">'+(g.v-g.c)+'</td><td class="num mono">'+g.otro+'</td><td class="num mono">'+g.e+'</td><td class="num mono">'+g.pend+'</td><td>'+(g.v?'<span class="pill '+semaforo(c)+'">'+c.toFixed(1)+'%</span>':'<span class="pill pend">—</span>')+'</td></tr>'; }).join("")+'</tbody></table>';
+
+    var noEf=cub.filter(function(p){return !p.efectiva;}), gm={};
+    noEf.forEach(function(p){ var c=categoria(p.motivo), g=gm[c]||(gm[c]={n:0,ej:{}}); g.n++; if(p.motivo) g.ej[p.motivo]=(g.ej[p.motivo]||0)+1; });
+    var mk=Object.keys(gm).sort(function(a,b){return gm[b].n-gm[a].n;});
+    $("tblMotivos").innerHTML = !mk.length? '<div class="empty">Sin visitas no efectivas en la semana.</div>' :
+      '<table><thead><tr><th>Motivo</th><th class="num">#</th><th class="num">%</th><th>Ejemplos</th></tr></thead><tbody>'+
+      mk.map(function(k){ var g=gm[k]; var ej=Object.keys(g.ej).sort(function(a,b){return g.ej[b]-g.ej[a];}).slice(0,2).map(function(t){return "“"+t+"”";}).join(" · ");
+        return '<tr><td>'+esc(k)+'</td><td class="num mono">'+g.n+'</td><td class="num mono">'+pct(g.n,noEf.length).toFixed(1)+'%</td><td>'+esc(ej)+'</td></tr>'; }).join("")+'</tbody></table>';
+
+    var nc=prog.filter(function(p){return p.estado==="nocub";}).sort(function(a,b){ return a.fecha-b.fecha || a.promotor.localeCompare(b.promotor); });
+    $("ncSub").textContent = nc.length+" tiendas programadas sin visita"+(nc.length>300?" (se muestran 300)":"");
+    $("tblNoCub").innerHTML = !nc.length? '<div class="empty">Todo lo vencido está cubierto.</div>' :
+      '<table><thead><tr><th>Día</th><th>Promotor</th><th>Tienda</th><th>Distrito</th></tr></thead><tbody>'+
+      nc.slice(0,300).map(function(p){ return '<tr><td class="mono">'+DIAS_T[p.di].slice(0,3)+" "+ymd(p.fecha).slice(5)+'</td><td>'+esc(p.promotor)+'</td><td>'+esc(p.r.estacion||p.r.store)+'</td><td>'+esc(p.r.distrito)+'</td></tr>'; }).join("")+'</tbody></table>';
+    reportHeight();
+  }
+
+  function renderCal(prog){
+    var by={};
+    prog.forEach(function(p){ var g=by[p.promotor]||(by[p.promotor]=[[],[],[],[],[],[]]); if(p.di<6) g[p.di].push(p); });
+    var ks=Object.keys(by).sort();
+    if(!ks.length){ $("tblCal").innerHTML='<div class="empty">No hay tiendas programadas con los filtros actuales.</div>'; return; }
+    var monday=new Date($("fSemana").value+"T00:00:00");
+    $("tblCal").innerHTML='<table class="cal"><thead><tr><th>Promotor</th>'+DIAS_T.map(function(d,i){ return '<th>'+d+' '+ymd(addDays(monday,i)).slice(8)+'</th>'; }).join("")+'<th class="num">Total</th></tr></thead><tbody>'+
+      ks.map(function(k){
+        var tot=0;
+        var cells=by[k].map(function(arr){
+          if(!arr.length) return '<td class="cell"></td>';
+          tot+=arr.length;
+          var c=arr.filter(function(p){return p.estado==="mismo"||p.estado==="otro";}).length,
+              pe=arr.filter(function(p){return p.estado==="pend";}).length;
+          var cls = pe===arr.length ? "st-pend" : c===arr.length-pe ? (c? "st-ok":"st-pend") : c===0 ? "st-bad" : "st-mix";
+          var ds={}; arr.forEach(function(p){ var d=p.r.distrito||"—"; ds[d]=(ds[d]||0)+1; });
+          var dl=Object.keys(ds).sort(function(a,b){return ds[b]-ds[a];}).map(function(d){ return esc(d)+(ds[d]>1?" ("+ds[d]+")":""); }).join(", ");
+          return '<td class="cell '+cls+'"><div class="cnt mono">'+arr.length+'<span style="font-weight:500;font-size:11px;color:var(--text-muted)"> tiendas</span></div><div class="dst">'+dl+'</div></td>';
+        }).join("");
+        return '<tr><td><b>'+esc(k)+'</b></td>'+cells+'<td class="num mono">'+tot+'</td></tr>';
+      }).join("")+'</tbody></table>';
+  }
+
+  /* ───────── controles ───────── */
+  function msBuild(host,label,onChange){
+    host.innerHTML='<button type="button" class="ms-btn"><span class="ms-txt"></span><span class="caret">▾</span></button><div class="ms-panel" hidden></div>';
+    var btn=host.querySelector(".ms-btn"), panel=host.querySelector(".ms-panel");
+    btn.addEventListener("click",function(e){ e.stopPropagation(); panel.hidden=!panel.hidden; });
+    document.addEventListener("click",function(e){ if(!host.contains(e.target)) panel.hidden=true; });
+    return { set:function(items){
+      panel.innerHTML='<label><input type="checkbox" data-all checked> <b>Todos</b></label><div class="ms-sep"></div>'+
+        items.map(function(v){ return '<label><input type="checkbox" value="'+esc(v)+'" checked> '+esc(v)+'</label>'; }).join("");
+      var all=panel.querySelector("[data-all]"), boxes=[].slice.call(panel.querySelectorAll("input[value]"));
+      function get(){ var c=boxes.filter(function(b){return b.checked;}); return c.length===boxes.length?null:new Set(c.map(function(b){return b.value;})); }
+      function sync(){ var n=boxes.filter(function(b){return b.checked;}).length; all.checked=n===boxes.length;
+        host.querySelector(".ms-txt").textContent = n===boxes.length? label+": todos" : n===0? label+": ninguno" : label+": "+n+" de "+boxes.length; }
+      all.addEventListener("change",function(){ boxes.forEach(function(b){b.checked=all.checked;}); sync(); onChange(get()); });
+      boxes.forEach(function(b){ b.addEventListener("change",function(){ sync(); onChange(get()); }); });
+      sync(); } };
+  }
+  var msPro=msBuild($("msPro"),"Promotor",function(s){ sel.pro=s; render(); });
+  var msCad=msBuild($("msCad"),"Cadena",function(s){ sel.cad=s; render(); });
+
+  function refreshControls(){
+    var ws=weeksAvail(), cur=$("fSemana").value;
+    $("fSemana").innerHTML=ws.map(function(w){ var m=new Date(w+"T00:00:00"); return '<option value="'+w+'">'+w+' · '+weekQ(m)+'</option>'; }).join("");
+    if(cur && ws.indexOf(cur)!==-1) $("fSemana").value=cur;
+    else { // última semana con datos (si hay), si no la actual
+      var withData=INFO? ymd(mondayOf(INFO.visits.reduce(function(a,v){return v.fecha>a?v.fecha:a;},new Date(2000,0,1)))) : ymd(mondayOf(new Date()));
+      $("fSemana").value = ws.indexOf(withData)!==-1 ? withData : ws[0];
+    }
+    if(PAD){
+      var curV=$("fVig").value;
+      $("fVig").innerHTML=PAD.labels.map(function(l,i){ return '<option value="'+i+'">'+esc(l)+'</option>'; }).join("");
+      $("fVig").value = curV!=="" && +curV<PAD.labels.length ? curV : String(PAD.labels.length-1);
+      var pr={}, ca={}; PAD.rows.forEach(function(r){ r.t.forEach(function(t){ if(t.promotor) pr[t.promotor]=1; }); if(r.cadena) ca[r.cadena]=1; });
+      msPro.set(Object.keys(pr).sort()); sel.pro=null; msCad.set(Object.keys(ca).sort()); sel.cad=null;
+    }
+  }
+  function setStatus(m,c){ var s=$("statusLine"); s.textContent=m; s.className="status-line"+(c?" "+c:""); }
+  function updateNames(){ $("fileName").textContent=[PAD?"Padrón ("+PAD.sheet+")":null, INFO?"Información General":null].filter(Boolean).join(" · ")||"Sin archivos cargados"; }
+  function show(){ if(PAD){ $("emptyBanner").hidden=true; $("app").hidden=false; refreshControls(); render(); } }
+  function applyWb(wb,kind){
+    if(kind==="pad"){
+      var p=parsePadron(wb); if(p.error){ setStatus("⚠ "+p.error,"err"); return false; }
+      PAD=p; updateNames(); show();
+      setStatus("✓ Padrón: "+p.rows.length.toLocaleString("es-PE")+" tiendas · columnas "+p.labels.join(", "),"ok"); return true;
+    }
+    var i=parseInfo(wb); if(i.error){ setStatus("⚠ "+i.error,"err"); return false; }
+    INFO=i; updateNames(); if(PAD){ refreshControls(); render(); }
+    setStatus("✓ Información General: "+i.visits.length.toLocaleString("es-PE")+" visitas"+(PAD?"":" (falta el padrón)"),"ok"); return true;
+  }
+  function readFile(file,kind){ setStatus("Leyendo "+file.name+"…");
+    return file.arrayBuffer().then(function(b){ applyWb(XLSX.read(b,{type:"array",cellDates:true}),kind); })
+      .catch(function(e){ setStatus("⚠ No se pudo leer el archivo: "+e.message,"err"); }); }
+  $("padInput").addEventListener("change",function(e){ if(e.target.files[0]) readFile(e.target.files[0],"pad"); e.target.value=""; });
+  $("infoInput").addEventListener("change",function(e){ if(e.target.files[0]) readFile(e.target.files[0],"info"); e.target.value=""; });
+  $("viewSeg").addEventListener("click",function(e){ var b=e.target.closest("button[data-v]"); if(!b) return; view=b.getAttribute("data-v");
+    [].forEach.call($("viewSeg").querySelectorAll("button"),function(x){ x.classList.toggle("on",x===b); });
+    $("vCob").hidden=view!=="cob"; $("vCal").hidden=view!=="cal"; render(); });
+  ["fSemana","fVig","fZona"].forEach(function(id){ $(id).addEventListener("change",render); });
+
+  /* ───────── SharePoint (Graph + MSAL) ───────── */
+  var MS=window.COB_MS||{}, msalApp=null, busy=false;
+  function b64url(s){ return btoa(unescape(encodeURIComponent(s))).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
+  function msToken(interactive){
+    var req={scopes:MS.scopes||["Files.Read.All"]}, acc=msalApp.getAllAccounts()[0];
+    if(acc){ req.account=acc; return msalApp.acquireTokenSilent(req).then(function(r){return r.accessToken;}).catch(function(){
+      if(!interactive) return Promise.reject(new Error("silent-failed")); return msalApp.acquireTokenPopup(req).then(function(r){return r.accessToken;}); }); }
+    if(!interactive) return Promise.reject(new Error("no-account"));
+    return msalApp.loginPopup(req).then(function(r){ if(r.account) $("msUser").textContent=r.account.username; return r.accessToken; });
+  }
+  function fetchBook(token,url){
+    return fetch("https://graph.microsoft.com/v1.0/shares/u!"+b64url(url)+"/driveItem/content",{headers:{Authorization:"Bearer "+token}})
+      .then(function(r){ if(!r.ok) throw new Error("Graph HTTP "+r.status); return r.arrayBuffer(); })
+      .then(function(b){ return XLSX.read(b,{type:"array",cellDates:true}); });
+  }
+  function msError(err,silent){
+    var m=(err&&err.message)||String(err); if(silent&&(m==="no-account"||m==="silent-failed")) return; var t;
+    if(m.indexOf("interaction_in_progress")!==-1) t="Login en curso o interrumpido. Recarga la página (F5).";
+    else if(m.indexOf("popup")!==-1) t="El navegador bloqueó la ventana de inicio de sesión. Permite ventanas emergentes para bat360.vercel.app.";
+    else if(m.indexOf("AADSTS50011")!==-1||m.indexOf("redirect_uri")!==-1) t="Falta registrar esta página como Redirect URI (SPA) en Entra: bat360 → Authentication → .../cobertura.html. Mientras tanto usa la carga manual.";
+    else if(m.indexOf("Graph HTTP 403")!==-1) t="Tu cuenta no tiene acceso al archivo (403). Pide que te lo compartan; mientras tanto usa la carga manual.";
+    else if(m.indexOf("Graph HTTP 404")!==-1) t="No se encontró el archivo compartido (404). El link pudo cambiar.";
+    else t="No se pudo cargar desde SharePoint: "+m;
+    setStatus("⚠ "+t,"err");
+  }
+  function loadLive(silent){
+    if(busy) return; busy=true; if(!silent) setStatus("Conectando con SharePoint…");
+    msToken(!silent).then(function(token){
+      return fetchBook(token,MS.padUrl).then(function(wb){ if(!applyWb(wb,"pad")) return; $("msRefreshBtn").hidden=false;
+        return fetchBook(token,MS.infoUrl).then(function(wb2){ var base=$("statusLine").textContent; if(applyWb(wb2,"info")) setStatus(base+" · "+$("statusLine").textContent.replace("✓ ",""),"ok"); })
+          .catch(function(e){ setStatus($("statusLine").textContent+" · Información General no disponible ("+((e&&e.message)||"error")+"): cárgala manualmente.","ok"); }); });
+    }).catch(function(e){ msError(e,silent); }).finally(function(){ busy=false; });
+  }
+  function initMs(){
+    if(!MS.clientId||typeof msal==="undefined"){ $("msRow").hidden=true; return; }
+    $("msRow").hidden=false;
+    msalApp=new msal.PublicClientApplication({auth:{clientId:MS.clientId,authority:"https://login.microsoftonline.com/"+(MS.tenant||"organizations"),redirectUri:location.origin+location.pathname},cache:{cacheLocation:"localStorage"}});
+    msalApp.initialize().then(function(){ return msalApp.handleRedirectPromise(); }).then(function(resp){
+      if(resp&&resp.account) msalApp.setActiveAccount(resp.account);
+      var acc=msalApp.getActiveAccount()||msalApp.getAllAccounts()[0];
+      if(acc){ msalApp.setActiveAccount(acc); $("msUser").textContent=acc.username; loadLive(true); }
+    }).catch(function(e){ console.warn("MSAL init:",e&&e.message); });
+    $("msConnectBtn").addEventListener("click",function(){ loadLive(false); });
+    $("msRefreshBtn").addEventListener("click",function(){ loadLive(false); });
+  }
+  window.__cob={applyWb:applyWb};   // gancho para verificación local
+  initMs();
+
+  function reportHeight(){
+    try{ if(window.parent&&window.parent!==window){ window.parent.postMessage({__cobertura:"height",h:Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)},"*"); } }catch(e){}
+  }
+  if(window.ResizeObserver){ try{ new ResizeObserver(reportHeight).observe(document.documentElement); }catch(e){} }
+  window.addEventListener("load",reportHeight); window.addEventListener("resize",reportHeight); setTimeout(reportHeight,300);
+})();
+</script>
+</body>
+</html>

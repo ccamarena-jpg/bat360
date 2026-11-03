@@ -161,7 +161,7 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
         <button type="button" data-v="tabla">📋 Tabla</button>
       </div>
     </div>
-    <p class="sub">Se cuentan <b>tiendas</b>: implementadas (al menos una visita con el material puesto) frente a no implementadas. Los chips indican el tipo de implementación.</p>
+    <p class="sub">Se cuentan <b>tiendas</b>: implementadas (al menos una visita con el material puesto) frente a no implementadas, <b>sobre las tiendas ya visitadas</b>. Para medir el avance contra el universo hay que fijar la <code>meta</code> (tiendas objetivo) del material en <code>config/materiales.json</code>. Los chips indican el tipo de implementación.</p>
     <div class="pie-grid" id="pies"></div>
     <div class="table-wrap" id="tblAvance" hidden></div>
   </section>
@@ -456,7 +456,7 @@ window.MAT_MS = {
   function renderAvanceTable(){
     var rows = lastList.map(function(m){
       var pend = m.meta ? Math.max(0, m.meta-m.total) : 0;
-      return { id:m.id, nombre:matLabel(m.id), total:m.total, ok:m.ok, no:m.no, pct:m.total?m.ok/m.total:-1, meta:m.meta, pend:pend,
+      return { id:m.id, nombre:matLabel(m.id), total:m.total, ok:m.ok, no:m.no, pct:m.total?m.ok/m.total:-1, meta:m.meta, pend:pend, avance:m.meta?m.ok/m.meta:-1,
         tipos:Object.keys(m.tipos).map(function(t){ return t+": "+m.tipos[t]; }).join(" · ") };
     });
     rows.sort(function(a,b){
@@ -464,7 +464,7 @@ window.MAT_MS = {
       if(typeof x==="string") return sortDir*x.localeCompare(y);
       return sortDir*(x-y) || a.nombre.localeCompare(b.nombre);
     });
-    var cols = [["nombre","Material",0],["total","Tiendas",1],["ok","Implementadas",1],["no","No impl.",1],["pct","% implementado",1],["meta","Meta",1],["pend","Pendientes",1],["tipos","Tipo de implementación",0]];
+    var cols = [["nombre","Material",0],["total","Tiendas visitadas",1],["ok","Implementadas",1],["no","No impl.",1],["pct","% de lo visitado",1],["meta","Meta",1],["avance","Avance vs meta",1],["pend","Pendientes",1],["tipos","Tipo de implementación",0]];
     var tot = rows.reduce(function(a,r){ a.t+=r.total; a.o+=r.ok; a.n+=r.no; return a; },{t:0,o:0,n:0});
     $("tblAvance").innerHTML = !rows.length ? '<div class="empty">No hay registros con los filtros actuales.</div>' :
       '<table><thead><tr>'+cols.map(function(c){
@@ -473,9 +473,9 @@ window.MAT_MS = {
         var p = r.pct<0 ? "—" : (r.pct*100).toFixed(1)+"%";
         return '<tr><td>'+esc(r.nombre)+'</td><td class="num mono">'+r.total+'</td><td class="num mono">'+r.ok+'</td><td class="num mono">'+r.no+
           '</td><td class="num mono">'+(r.pct<0?"":'<span class="bar" style="width:'+Math.round(r.pct*60)+'px"></span>')+p+'</td><td class="num mono">'+(r.meta||"—")+
-          '</td><td class="num mono">'+(r.meta?r.pend:"—")+'</td><td>'+esc(r.tipos||"—")+'</td></tr>'; }).join("")+
+          '</td><td class="num mono">'+(r.avance<0?"—":(r.avance*100).toFixed(1)+"%")+'</td><td class="num mono">'+(r.meta?r.pend:"—")+'</td><td>'+esc(r.tipos||"—")+'</td></tr>'; }).join("")+
       '<tr><td><b>Total</b></td><td class="num mono"><b>'+tot.t+'</b></td><td class="num mono"><b>'+tot.o+'</b></td><td class="num mono"><b>'+tot.n+
-      '</b></td><td class="num mono"><b>'+(tot.t?pct(tot.o,tot.t).toFixed(1)+"%":"—")+'</b></td><td></td><td></td><td></td></tr></tbody></table>';
+      '</b></td><td class="num mono"><b>'+(tot.t?pct(tot.o,tot.t).toFixed(1)+"%":"—")+'</b></td><td></td><td></td><td></td><td></td></tr></tbody></table>';
     [].forEach.call($("tblAvance").querySelectorAll("th.sortable"), function(th){
       th.addEventListener("click", function(){
         var k=th.getAttribute("data-k"); if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir = (k==="nombre"||k==="tipos")?1:-1; }
@@ -508,7 +508,7 @@ window.MAT_MS = {
       kpi("Visitas con material", Object.keys(vis).length.toLocaleString("es-PE"), "tienda × día") +
       kpi("Tiendas", Object.keys(storesAll).length.toLocaleString("es-PE"), "únicas en el periodo") +
       kpi("Materiales", list.filter(function(m){return m.total>0;}).length+" / "+list.length, "con registros / en alcance") +
-      kpi("% implementado", pairs? pct(pairsOk,pairs).toFixed(1)+"%" : "—", pairsOk.toLocaleString("es-PE")+" de "+pairs.toLocaleString("es-PE")+" tienda×material") +
+      kpi("Efectividad", pairs? pct(pairsOk,pairs).toFixed(1)+"%" : "—", pairsOk.toLocaleString("es-PE")+" de "+pairs.toLocaleString("es-PE")+" tienda×material visitados (no es avance del universo)") +
       kpi("No implementados", (pairs-pairsOk).toLocaleString("es-PE"), "tienda×material");
 
     charts.forEach(function(c){ try{c.destroy();}catch(e){} }); charts=[];
@@ -518,7 +518,7 @@ window.MAT_MS = {
       host.innerHTML = list.map(function(m,i){
         var tipos = Object.keys(m.tipos).map(function(t){ return '<span class="chip">'+esc(t)+': '+m.tipos[t]+'</span>'; }).join("");
         var pend = m.meta ? Math.max(0, m.meta-m.total) : 0;
-        return '<div class="pie-card"><h3>'+esc(matLabel(m.id))+'<small>'+(m.total? pct(m.ok,m.total).toFixed(1)+"% implementado" : "sin registros")+(m.meta? " · meta "+m.meta : "")+'</small></h3>'+
+        return '<div class="pie-card"><h3>'+esc(matLabel(m.id))+'<small>'+(m.total? pct(m.ok,m.total).toFixed(1)+"% de las tiendas visitadas" : "sin registros")+(m.meta? " · avance "+pct(m.ok,m.meta).toFixed(1)+"% de la meta ("+m.meta+")" : " · sin meta definida")+'</small></h3>'+
           '<div class="pie-wrap"><canvas id="pie'+i+'"></canvas></div>'+
           '<div class="legend-row"><span><i class="dot" style="background:var(--ok)"></i>Implementadas '+m.ok+'</span>'+
           '<span><i class="dot" style="background:var(--crit)"></i>No impl. '+m.no+'</span>'+
