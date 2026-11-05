@@ -128,6 +128,7 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
       <input type="file" id="infoInput" accept=".xlsx,.xlsm,.xls">
     </div>
     <div class="file-name" id="fileName">Sin archivo cargado</div>
+    <div class="file-name" id="modLine" title="Hora de la última modificación de cada archivo en SharePoint (o en tu equipo si lo cargaste a mano)"></div>
     <div class="status-line" id="statusLine"></div>
   </div>
 </header>
@@ -161,7 +162,7 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
         <button type="button" data-v="tabla">📋 Tabla</button>
       </div>
     </div>
-    <p class="sub">Se cuentan <b>tiendas</b>: implementadas (al menos una visita con el material puesto) frente a no implementadas, <b>sobre las tiendas ya visitadas</b>. Para medir el avance contra el universo hay que fijar la <code>meta</code> (tiendas objetivo) del material en <code>config/materiales.json</code>. Los chips indican el tipo de implementación.</p>
+    <p class="sub">Se cuentan <b>tiendas</b>. El <b>avance</b> compara las tiendas con el material puesto contra el <b>universo</b>: por defecto, las tiendas distintas del archivo (según cadena y zona filtradas); para un material que solo aplica a algunas tiendas, fija su <code>meta</code> en <code>config/materiales.json</code>. La <b>efectividad</b> solo mira las tiendas ya visitadas con ese material. El gris son las tiendas pendientes. Los chips indican el tipo de implementación.</p>
     <div class="pie-grid" id="pies"></div>
     <div class="table-wrap" id="tblAvance" hidden></div>
   </section>
@@ -470,18 +471,19 @@ window.MAT_MS = {
       if(typeof x==="string") return sortDir*x.localeCompare(y);
       return sortDir*(x-y) || a.nombre.localeCompare(b.nombre);
     });
-    var cols = [["nombre","Material",0],["total","Tiendas visitadas",1],["ok","Implementadas",1],["no","No impl.",1],["pct","% de lo visitado",1],["meta","Meta",1],["avance","Avance vs meta",1],["pend","Pendientes",1],["tipos","Tipo de implementación",0]];
-    var tot = rows.reduce(function(a,r){ a.t+=r.total; a.o+=r.ok; a.n+=r.no; return a; },{t:0,o:0,n:0});
+    var cols = [["nombre","Material",0],["meta","Universo",1],["total","Visitadas",1],["ok","Implementadas",1],["no","No impl.",1],["pend","Pendientes",1],["avance","Avance vs universo",1],["pct","Efectividad en visitadas",1],["tipos","Tipo de implementación",0]];
+    var tot = rows.reduce(function(a,r){ a.t+=r.total; a.o+=r.ok; a.n+=r.no; a.u+=r.meta; a.p+=r.pend; return a; },{t:0,o:0,n:0,u:0,p:0});
     $("tblAvance").innerHTML = !rows.length ? '<div class="empty">No hay registros con los filtros actuales.</div>' :
       '<table><thead><tr>'+cols.map(function(c){
         return '<th class="sortable'+(c[2]?' num':'')+'" data-k="'+c[0]+'">'+c[1]+(sortKey===c[0]?(sortDir<0?" ▾":" ▴"):"")+'</th>'; }).join("")+'</tr></thead><tbody>'+
       rows.map(function(r){
         var p = r.pct<0 ? "—" : (r.pct*100).toFixed(1)+"%";
-        return '<tr><td>'+esc(r.nombre)+'</td><td class="num mono">'+r.total+'</td><td class="num mono">'+r.ok+'</td><td class="num mono">'+r.no+
-          '</td><td class="num mono">'+(r.pct<0?"":'<span class="bar" style="width:'+Math.round(r.pct*60)+'px"></span>')+p+'</td><td class="num mono">'+(r.meta||"—")+
-          '</td><td class="num mono">'+(r.avance<0?"—":(r.avance*100).toFixed(1)+"%")+'</td><td class="num mono">'+(r.meta?r.pend:"—")+'</td><td>'+esc(r.tipos||"—")+'</td></tr>'; }).join("")+
-      '<tr><td><b>Total</b></td><td class="num mono"><b>'+tot.t+'</b></td><td class="num mono"><b>'+tot.o+'</b></td><td class="num mono"><b>'+tot.n+
-      '</b></td><td class="num mono"><b>'+(tot.t?pct(tot.o,tot.t).toFixed(1)+"%":"—")+'</b></td><td></td><td></td><td></td><td></td></tr></tbody></table>';
+        var av = r.avance<0 ? "—" : (r.avance*100).toFixed(1)+"%";
+        return '<tr><td>'+esc(r.nombre)+'</td><td class="num mono">'+(r.meta||"—")+'</td><td class="num mono">'+r.total+'</td><td class="num mono">'+r.ok+'</td><td class="num mono">'+r.no+
+          '</td><td class="num mono">'+(r.meta?r.pend:"—")+'</td><td class="num mono">'+(r.avance<0?"":'<span class="bar" style="width:'+Math.round(r.avance*60)+'px"></span>')+av+
+          '</td><td class="num mono">'+p+'</td><td>'+esc(r.tipos||"—")+'</td></tr>'; }).join("")+
+      '<tr><td><b>Total</b></td><td class="num mono"><b>'+tot.u+'</b></td><td class="num mono"><b>'+tot.t+'</b></td><td class="num mono"><b>'+tot.o+'</b></td><td class="num mono"><b>'+tot.n+
+      '</b></td><td class="num mono"><b>'+tot.p+'</b></td><td class="num mono"><b>'+(tot.u?pct(tot.o,tot.u).toFixed(1)+"%":"—")+'</b></td><td class="num mono"><b>'+(tot.t?pct(tot.o,tot.t).toFixed(1)+"%":"—")+'</b></td><td></td></tr></tbody></table>';
     [].forEach.call($("tblAvance").querySelectorAll("th.sortable"), function(th){
       th.addEventListener("click", function(){
         var k=th.getAttribute("data-k"); if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir = (k==="nombre"||k==="tipos")?1:-1; }
@@ -502,19 +504,26 @@ window.MAT_MS = {
     var mesKey = $("fMes").value, cfgMes = CFG.meses && CFG.meses[mesKey];
     var metaOf = {}; if(cfgMes && cfgMes.materiales) cfgMes.materiales.forEach(function(m){ if(m.meta) metaOf[+m.id]=+m.meta; });
     if(f.scope) f.scope.forEach(function(id){ if(!byMat[id] && DATA.mats[id]) byMat[id]={id:id,stores:{},tipos:{}}; });
+    // Universo estimado = tiendas distintas del archivo (todas las fechas) que cumplen cadena y zona. La meta del
+    // config (tiendas objetivo del material) tiene prioridad cuando no hay filtro de cadena/zona.
+    var zonaSel = $("fZona").value, uniSet = {};
+    DATA.recs.forEach(function(r){ if(zonaSel && r.zona!==zonaSel) return; if(sel.cad && !sel.cad.has(r.cadena)) return; uniSet[r.store]=1; });
+    var universo = Object.keys(uniSet).length, filtrado = !!(zonaSel || sel.cad);
     var list = Object.keys(byMat).map(function(k){
       var m=byMat[k], st=Object.keys(m.stores), ok=st.filter(function(s){return m.stores[s].impl;}).length;
-      return {id:m.id, total:st.length, ok:ok, no:st.length-ok, tipos:m.tipos, meta:metaOf[m.id]||0};
+      var cfgMeta = (!filtrado && metaOf[m.id]) ? metaOf[m.id] : 0;
+      return {id:m.id, total:st.length, ok:ok, no:st.length-ok, tipos:m.tipos, meta:cfgMeta||universo, metaEst:!cfgMeta};
     }).sort(function(a,b){ return b.total-a.total || matLabel(a.id).localeCompare(matLabel(b.id)); });
 
     var storesAll = {}, vis = {}, pairs=0, pairsOk=0;
     recs.forEach(function(r){ storesAll[r.store]=1; vis[r.store+"|"+ymd(r.fecha)]=1; });
-    list.forEach(function(m){ pairs+=m.total; pairsOk+=m.ok; });
+    var uniTot=0; list.forEach(function(m){ pairs+=m.total; pairsOk+=m.ok; uniTot+=m.meta; });
     $("kpis").innerHTML =
       kpi("Visitas con material", Object.keys(vis).length.toLocaleString("es-PE"), "tienda × día") +
       kpi("Tiendas", Object.keys(storesAll).length.toLocaleString("es-PE"), "únicas en el periodo") +
       kpi("Materiales", list.filter(function(m){return m.total>0;}).length+" / "+list.length, "con registros / en alcance") +
-      kpi("Efectividad", pairs? pct(pairsOk,pairs).toFixed(1)+"%" : "—", pairsOk.toLocaleString("es-PE")+" de "+pairs.toLocaleString("es-PE")+" tienda×material visitados (no es avance del universo)") +
+      kpi("Avance vs universo", uniTot? pct(pairsOk,uniTot).toFixed(1)+"%" : "—", pairsOk.toLocaleString("es-PE")+" de "+uniTot.toLocaleString("es-PE")+" tienda×material (universo estimado o meta)") +
+      kpi("Efectividad", pairs? pct(pairsOk,pairs).toFixed(1)+"%" : "—", "de lo ya visitado: "+pairsOk.toLocaleString("es-PE")+" de "+pairs.toLocaleString("es-PE")) +
       kpi("No implementados", (pairs-pairsOk).toLocaleString("es-PE"), "tienda×material");
 
     charts.forEach(function(c){ try{c.destroy();}catch(e){} }); charts=[];
@@ -524,7 +533,7 @@ window.MAT_MS = {
       host.innerHTML = list.map(function(m,i){
         var tipos = Object.keys(m.tipos).map(function(t){ return '<span class="chip">'+esc(t)+': '+m.tipos[t]+'</span>'; }).join("");
         var pend = m.meta ? Math.max(0, m.meta-m.total) : 0;
-        return '<div class="pie-card"><h3>'+esc(matLabel(m.id))+'<small>'+(m.total? pct(m.ok,m.total).toFixed(1)+"% de las tiendas visitadas" : "sin registros")+(m.meta? " · avance "+pct(m.ok,m.meta).toFixed(1)+"% de la meta ("+m.meta+")" : " · sin meta definida")+'</small></h3>'+
+        return '<div class="pie-card"><h3>'+esc(matLabel(m.id))+'<small>Avance '+pct(m.ok,m.meta).toFixed(1)+'% · '+m.ok+' de '+m.meta+(m.metaEst?' tiendas (universo estimado)':' (meta)')+'<br>Efectividad en visitadas: '+(m.total? pct(m.ok,m.total).toFixed(1)+"%" : "—")+'</small></h3>'+
           '<div class="pie-wrap"><canvas id="pie'+i+'"></canvas></div>'+
           '<div class="legend-row"><span><i class="dot" style="background:var(--ok)"></i>Implementadas '+m.ok+'</span>'+
           '<span><i class="dot" style="background:var(--crit)"></i>No impl. '+m.no+'</span>'+
@@ -581,7 +590,7 @@ window.MAT_MS = {
   }
 
   /* ───────── carga de datos ───────── */
-  function refreshControls(){
+  function refreshControls(keepFilters){
     var meses = monthsAvail(), cur=$("fMes").value;
     $("fMes").innerHTML = '<option value="">Todo el periodo</option>' + meses.map(function(k){ return '<option value="'+k+'">'+mesLabel(k)+'</option>'; }).join("");
     var withData = {}; DATA.recs.forEach(function(r){ withData[r.mes]=1; });
@@ -590,28 +599,41 @@ window.MAT_MS = {
     $("fMes").value = keep ? cur : def;
     if(!keep) setMonthDates($("fMes").value);
     var mats = Object.keys(DATA.mats).map(Number).sort(function(a,b){ return a-b; });
+    if(keepFilters) return;   // recarga automática: no tocar los filtros de material/cadena que eligió el usuario
     msMat.set(mats.map(function(id){ return {v:id,t:matLabel(id)+" · id "+id}; })); sel.mat=null;
     var cads = {}; DATA.recs.forEach(function(r){ cads[r.cadena]=1; });
     msCad.set(Object.keys(cads).sort().map(function(c){ return {v:c,t:c}; })); sel.cad=null;
   }
   function setStatus(msg, cls){ var s=$("statusLine"); s.textContent=msg; s.className="status-line"+(cls?" "+cls:""); }
+  /* "Datos al": hora de modificación de cada archivo + última vez que se revisó */
+  var MOD={pop:null,info:null}, CHK=null, autoMode=false;
+  function fmtHM(d){ try{ return new Date(d).toLocaleString("es-PE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}); }catch(e){ return ""; } }
+  function showMod(){
+    var parts=[];
+    if(MOD.pop) parts.push("Ejecución POP: datos al "+fmtHM(MOD.pop));
+    if(MOD.info) parts.push("Información General: "+fmtHM(MOD.info));
+    if(CHK) parts.push("revisado "+new Date(CHK).toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit",hour12:false}));
+    $("modLine").textContent=parts.join(" · ");
+  }
   function applyWb(wb, kind, label){
     if(kind==="pop"){
       var p = parsePop(wb); if(p.error){ setStatus("⚠ "+p.error,"err"); return false; }
-      DATA = p; $("emptyBanner").hidden=true; $("app").hidden=false; $("fileName").textContent = label;
-      refreshControls(); render();
+      DATA = p; MOD.pop = wb.__mod||null; CHK = new Date(); showMod();
+      $("emptyBanner").hidden=true; $("app").hidden=false; $("fileName").textContent = label;
+      refreshControls(autoMode); render();
       setStatus("✓ "+Object.keys(p.mats).length+" materiales · "+p.recs.length.toLocaleString("es-PE")+" registros · "+p.visitas.toLocaleString("es-PE")+" visitas","ok");
       return true;
     }
     var i = parseInfo(wb); if(i.error){ setStatus("⚠ "+i.error,"err"); return false; }
-    INFO = i; if(DATA) render();
+    INFO = i; MOD.info = wb.__mod||null; showMod(); if(DATA) render();
     setStatus("✓ Información General: "+i.recs.length.toLocaleString("es-PE")+" visitas no efectivas","ok");
     return true;
   }
   function readFile(file, kind){
     setStatus("Leyendo "+file.name+"…");
     return file.arrayBuffer().then(function(buf){
-      applyWb(XLSX.read(buf,{type:"array",cellDates:true}), kind, file.name);
+      var wb = XLSX.read(buf,{type:"array",cellDates:true}); wb.__mod = new Date(file.lastModified);
+      applyWb(wb, kind, file.name);
     }).catch(function(e){ setStatus("⚠ No se pudo leer el archivo: "+e.message,"err"); });
   }
   $("fileInput").addEventListener("change", function(e){ if(e.target.files[0]) readFile(e.target.files[0],"pop"); e.target.value=""; });
@@ -630,9 +652,25 @@ window.MAT_MS = {
     return msalApp.loginPopup(req).then(function(r){ if(r.account) $("msUser").textContent=r.account.username; return r.accessToken; });
   }
   function fetchBook(token, url){
-    return fetch("https://graph.microsoft.com/v1.0/shares/u!"+b64url(url)+"/driveItem/content",{headers:{Authorization:"Bearer "+token}})
+    var base="https://graph.microsoft.com/v1.0/shares/u!"+b64url(url)+"/driveItem", opt={headers:{Authorization:"Bearer "+token}};
+    var meta=fetch(base+"?$select=lastModifiedDateTime",opt).then(function(r){ return r.ok?r.json():null; }).catch(function(){ return null; });
+    return fetch(base+"/content",opt)
       .then(function(res){ if(!res.ok) throw new Error("Graph HTTP "+res.status); return res.arrayBuffer(); })
-      .then(function(buf){ return XLSX.read(buf,{type:"array",cellDates:true}); });
+      .then(function(buf){ var wb=XLSX.read(buf,{type:"array",cellDates:true});
+        return meta.then(function(m){ if(m && m.lastModifiedDateTime) wb.__mod=new Date(m.lastModifiedDateTime); return wb; }); });
+  }
+  // recarga automática cada 10 min mientras la pestaña esté visible (conserva los filtros elegidos)
+  var autoTimer=null;
+  function startAuto(){
+    if(autoTimer) return;
+    autoTimer=setInterval(function(){
+      if(document.hidden || msBusy || !msalApp) return;
+      msBusy=true; autoMode=true;
+      msToken(false).then(function(t){
+        return fetchBook(t, MS.popUrl).then(function(wb){ applyWb(wb,"pop","SharePoint · 582-EJECUCIÓN-POP (en vivo)"); })
+          .then(function(){ return fetchBook(t, MS.infoUrl).then(function(wb2){ applyWb(wb2,"info",""); }).catch(function(){}); });
+      }).catch(function(){}).finally(function(){ msBusy=false; autoMode=false; });
+    }, 10*60*1000);
   }
   function msError(err, silent){
     var msg=(err&&err.message)||String(err);
@@ -652,7 +690,7 @@ window.MAT_MS = {
     msToken(!silent).then(function(token){
       return fetchBook(token, MS.popUrl).then(function(wb){
         if(!applyWb(wb,"pop","SharePoint · 582-EJECUCIÓN-POP (en vivo)")) return;
-        $("msRefreshBtn").hidden=false;
+        $("msRefreshBtn").hidden=false; startAuto();
         return fetchBook(token, MS.infoUrl).then(function(wb2){
           var base=$("statusLine").textContent;
           if(applyWb(wb2,"info","")) setStatus(base+" · "+$("statusLine").textContent.replace("✓ ",""),"ok");

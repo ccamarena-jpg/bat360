@@ -58,6 +58,10 @@ input[type=file]{display:none;}
 .filter-field select{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px;
   border:1px solid var(--border); background:var(--bg); color:var(--text); min-width:150px;}
 .filter-field input[type=search]{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);}
+.mot-bar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:6px;}
+input.motivo{font-family:inherit; font-size:12.5px; padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:100%; min-width:240px;}
+input.motivo.dirty{border-color:var(--warn); background:var(--warn-bg);}
+input.motivo.saved{border-color:var(--ok);}
 a.foto{text-decoration:none; font-size:15px; margin-right:6px; white-space:nowrap;}
 a.foto small{font-size:10.5px; color:var(--text-muted); margin-left:2px;}
 .filter-hint{font-size:12px; color:var(--text-muted); margin:0 0 16px;}
@@ -123,6 +127,7 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
       <input type="file" id="infoInput" accept=".xlsx,.xlsm,.xls">
     </div>
     <div class="file-name" id="fileName">Sin archivos cargados</div>
+    <div class="file-name" id="modLine" title="Hora de la última modificación de cada archivo en SharePoint (o en tu equipo si lo cargaste a mano)"></div>
     <div class="status-line" id="statusLine"></div>
   </div>
 </header>
@@ -157,17 +162,26 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
       <p class="sub"><b>Programadas</b> = tiendas que le tocan esa semana según el padrón (día y frecuencia). <b>Vencidas</b> = las de días anteriores a hoy. <b>Cubierta</b> = hubo visita a la tienda dentro del rango elegido (mismo día o en otro; sábados y domingos incluidos). <b>Cobertura al día</b> = cubiertas ÷ vencidas (solo lo que ya debió hacerse). <b>Avance semana</b> = cubiertas ÷ programadas (todo lo de la semana). Hoy y los días siguientes cuentan como pendientes.</p>
       <div class="table-wrap" id="tblPromotor"></div>
     </section>
-    <section class="block two-col">
-      <div>
-        <h2>Motivos de no efectividad</h2>
-        <p class="sub">Visitas hechas pero con local cerrado o sin permitir la promotoría.</p>
-        <div class="table-wrap" id="tblMotivos"></div>
+    <section class="block">
+      <h2>Motivos de no efectividad</h2>
+      <p class="sub">Visitas hechas pero con local cerrado o sin permitir la promotoría.</p>
+      <div class="table-wrap" id="tblMotivos"></div>
+    </section>
+    <section class="block">
+      <h2>No cubiertas</h2>
+      <p class="sub" id="ncSub"></p>
+      <div class="mot-bar">
+        <button class="btn" id="motSave" type="button">💾 Guardar motivos</button>
+        <button class="btn ghost" id="motDown" type="button">⬇ Descargar Excel</button>
+        <span class="status-line" id="motStatus"></span>
       </div>
-      <div>
-        <h2>No cubiertas</h2>
-        <p class="sub" id="ncSub"></p>
-        <div class="table-wrap" id="tblNoCub"></div>
-      </div>
+      <p class="sub" style="margin-top:6px">Escribe el motivo de cada tienda no cubierta (o elige uno de la lista). Se guardan en <code>582-MOTIVOS-NO-COBERTURA.xlsx</code>, en la misma carpeta de SharePoint que Información General (hoja <code>MOTIVOS</code>), y se vuelven a mostrar aquí.</p>
+      <div class="table-wrap" id="tblNoCub"></div>
+      <datalist id="dlMotivos">
+        <option value="Promotor ausente / descanso"><option value="Promotor con permiso o vacaciones"><option value="Promotor renunció / sin reemplazo">
+        <option value="Tienda cerrada o en mantenimiento"><option value="No se alcanzó por tiempo"><option value="Sin movilidad / problema de transporte">
+        <option value="Ruta reprogramada"><option value="Error de ruteo / tienda no corresponde"><option value="Local no permitió el ingreso">
+      </datalist>
     </section>
     <section class="block">
       <h2>Listado de tiendas</h2>
@@ -454,13 +468,131 @@ window.COB_REF_Q1 = "2026-10-26";
         return '<tr><td>'+esc(k)+'</td><td class="num mono">'+g.n+'</td><td class="num mono">'+pct(g.n,noEf.length).toFixed(1)+'%</td><td>'+esc(ej)+'</td></tr>'; }).join("")+'</tbody></table>';
 
     var nc=prog.filter(function(p){return p.estado==="nocub";}).sort(function(a,b){ return a.fecha-b.fecha || a.promotor.localeCompare(b.promotor); });
-    $("ncSub").textContent = nc.length+" tiendas programadas sin visita"+(nc.length>300?" (se muestran 300)":"");
+    var conMot = nc.filter(function(p){ return MOT[motKey(p)]; }).length;
+    $("ncSub").textContent = nc.length+" tiendas programadas sin visita · "+conMot+" con motivo, "+(nc.length-conMot)+" sin motivo"+(nc.length>300?" (se muestran 300)":"");
     $("tblNoCub").innerHTML = !nc.length? '<div class="empty">Todo lo vencido está cubierto.</div>' :
-      '<table><thead><tr><th>Día</th><th>Promotor</th><th>Tienda</th><th>Distrito</th></tr></thead><tbody>'+
-      nc.slice(0,300).map(function(p){ return '<tr><td class="mono">'+DIAS_T[p.di].slice(0,3)+" "+ymd(p.fecha).slice(5)+'</td><td>'+esc(p.promotor)+'</td><td>'+esc(p.r.estacion||p.r.store)+'</td><td>'+esc(p.r.distrito)+'</td></tr>'; }).join("")+'</tbody></table>';
+      '<table><thead><tr><th>Día</th><th>Promotor</th><th>Código</th><th>Tienda</th><th>Distrito</th><th style="min-width:280px">Motivo</th></tr></thead><tbody>'+
+      nc.slice(0,300).map(function(p){
+        var k=motKey(p), m=MOT[k], cls=DIRTY[k]?" dirty":(m?" saved":"");
+        return '<tr><td class="mono">'+DIAS_T[p.di].slice(0,3)+" "+ymd(p.fecha).slice(5)+'</td><td>'+esc(p.promotor)+'</td><td class="mono">'+esc(p.r.store)+'</td><td>'+esc(p.r.estacion||p.r.store)+'</td><td>'+esc(p.r.distrito)+
+          '</td><td><input class="motivo'+cls+'" list="dlMotivos" data-k="'+esc(k)+'" value="'+esc(m?m.motivo:"")+'" placeholder="Escribir motivo…"></td></tr>'; }).join("")+'</tbody></table>';
+    lastNC = {}; nc.forEach(function(p){ lastNC[motKey(p)]=p; });
+    updateMotBar();
     lastProg = prog;
     renderTiendas();
     reportHeight();
+  }
+
+  /* ───────── motivos de no cubiertas (se guardan en un Excel junto a Información General) ───────── */
+  var MOT = {};            // clave "store|AAAA-MM-DD" → {store,tienda,promotor,fecha,motivo,por,el}
+  var DIRTY = {};          // claves editadas y aún no guardadas (valor: true)
+  var lastNC = {};
+  var MOT_FILE = "582-MOTIVOS-NO-COBERTURA.xlsx", MOT_SHEET = "MOTIVOS";
+  var MOT_COLS = ["CLAVE","STORE_ID","TIENDA","PROMOTOR","FECHA PROGRAMADA","MOTIVO","REGISTRADO POR","REGISTRADO EL"];
+  function motKey(p){ return p.r.store+"|"+ymd(p.fecha); }
+  function userName(){ var a=msalApp && (msalApp.getActiveAccount()||msalApp.getAllAccounts()[0]); return a? a.username : "manual"; }
+  try{ var d0=JSON.parse(localStorage.getItem("bat360_cob_motivos")||"null"); if(d0){ MOT=d0.MOT||{}; DIRTY=d0.DIRTY||{}; } }catch(e){}
+  function persist(){ try{ localStorage.setItem("bat360_cob_motivos",JSON.stringify({MOT:MOT,DIRTY:DIRTY})); }catch(e){} }
+  function motStatus(m,c){ var s=$("motStatus"); s.textContent=m||""; s.className="status-line"+(c?" "+c:""); }
+  function updateMotBar(){
+    var n=Object.keys(DIRTY).length;
+    $("motSave").textContent = n? "💾 Guardar motivos ("+n+")" : "💾 Guardar motivos";
+    $("motSave").disabled = !n;
+    if(n && !$("motStatus").textContent) motStatus(n+" cambio(s) sin guardar","");
+  }
+  $("tblNoCub").addEventListener("change",function(e){
+    var inp=e.target.closest("input.motivo"); if(!inp) return;
+    var k=inp.getAttribute("data-k"), p=lastNC[k], v=clean(inp.value);
+    if(v){ MOT[k]={ store:p?p.r.store:k.split("|")[0], tienda:p?(p.r.estacion||p.r.store):(MOT[k]&&MOT[k].tienda)||"", promotor:p?p.promotor:(MOT[k]&&MOT[k].promotor)||"",
+      fecha:k.split("|")[1], motivo:v, por:userName(), el:new Date().toISOString() }; }
+    else delete MOT[k];
+    DIRTY[k]=true; persist();
+    inp.classList.add("dirty"); inp.classList.remove("saved"); motStatus("",""); updateMotBar();
+  });
+  function motRows(){
+    return Object.keys(MOT).sort().map(function(k){ var m=MOT[k]; return [k,m.store,m.tienda,m.promotor,m.fecha,m.motivo,m.por||"",m.el||""]; });
+  }
+  function motWorkbook(rows){
+    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([MOT_COLS].concat(rows)),MOT_SHEET); return wb;
+  }
+  function parseMotWb(wb){
+    var ws=wb.Sheets[MOT_SHEET]||wb.Sheets[wb.SheetNames[0]]; if(!ws) return {};
+    var rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:true}), out={};
+    var h=(rows[0]||[]).map(function(c){return String(c).trim().toUpperCase();}), ix=function(n){return h.indexOf(n);};
+    var iK=ix("CLAVE"), iS=ix("STORE_ID"), iT=ix("TIENDA"), iP=ix("PROMOTOR"), iF=ix("FECHA PROGRAMADA"), iM=ix("MOTIVO"), iU=ix("REGISTRADO POR"), iE=ix("REGISTRADO EL");
+    for(var r=1;r<rows.length;r++){ var row=rows[r], k=clean(row[iK]), mo=clean(row[iM]); if(!k||!mo) continue;
+      out[k]={store:clean(row[iS]),tienda:clean(row[iT]),promotor:clean(row[iP]),fecha:clean(row[iF]),motivo:mo,por:clean(row[iU]),el:clean(row[iE])}; }
+    return out;
+  }
+  $("motDown").addEventListener("click",function(){
+    var n=Object.keys(MOT).length; if(!n){ motStatus("Aún no hay motivos escritos.","err"); return; }
+    XLSX.writeFile(motWorkbook(motRows()), MOT_FILE); motStatus("Descargado "+MOT_FILE+" ("+n+" motivos). Puedes subirlo a la carpeta de SharePoint.","ok");
+  });
+
+  /* Guardado en SharePoint: lee el Excel de motivos (si existe), mezcla los cambios y lo vuelve a escribir.
+     Requiere el permiso Files.ReadWrite.All en la app bat360 de Entra; se pide solo al pulsar Guardar. */
+  var GRAPH="https://graph.microsoft.com/v1.0", WRITE_SCOPES=["Files.ReadWrite.All"], motTarget=null;
+  var getWriteToken=function(){
+    if(!msalApp) return Promise.reject(new Error("no-msal"));
+    var acc=msalApp.getActiveAccount()||msalApp.getAllAccounts()[0], req={scopes:WRITE_SCOPES};
+    if(!acc) return msalApp.loginPopup(req).then(function(r){ return r.accessToken; });
+    req.account=acc;
+    return msalApp.acquireTokenSilent(req).then(function(r){ return r.accessToken; })
+      .catch(function(){ return msalApp.acquireTokenPopup(req).then(function(r){ return r.accessToken; }); });
+  };
+  function gjson(token,url){ return fetch(url,{headers:{Authorization:"Bearer "+token}}).then(function(r){ if(r.status===404) return null; if(!r.ok) throw new Error("Graph HTTP "+r.status); return r.json(); }); }
+  function resolveTarget(token){
+    if(motTarget) return Promise.resolve(motTarget);
+    return gjson(token,GRAPH+"/shares/u!"+b64url(MS.infoUrl)+"/driveItem?$select=id,parentReference").then(function(it){
+      if(!it||!it.parentReference) throw new Error("No pude ubicar la carpeta de Información General.");
+      motTarget=GRAPH+"/drives/"+it.parentReference.driveId+"/items/"+it.parentReference.id+":/"+encodeURIComponent(MOT_FILE); return motTarget; });
+  }
+  function readRemoteMot(token,base){
+    return gjson(token,base+"?$select=eTag").then(function(meta){
+      if(!meta) return {rows:{},etag:null};
+      return fetch(base+":/content",{headers:{Authorization:"Bearer "+token}}).then(function(r){ if(!r.ok) throw new Error("Graph HTTP "+r.status); return r.arrayBuffer(); })
+        .then(function(b){ return {rows:parseMotWb(XLSX.read(b,{type:"array"})),etag:meta.eTag}; });
+    });
+  }
+  function saveMotivos(token, intento){
+    return resolveTarget(token).then(function(base){
+      var itemUrl=base; // .../items/{id}:/NAME
+      return readRemoteMot(token,itemUrl).then(function(rem){
+        var merged=Object.assign({},rem.rows);
+        Object.keys(DIRTY).forEach(function(k){ if(MOT[k]) merged[k]=MOT[k]; else delete merged[k]; });
+        var rows=Object.keys(merged).sort().map(function(k){ var m=merged[k]; return [k,m.store,m.tienda,m.promotor,m.fecha,m.motivo,m.por||"",m.el||""]; });
+        var out=XLSX.write(motWorkbook(rows),{type:"array",bookType:"xlsx"});
+        var headers={Authorization:"Bearer "+token,"Content-Type":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"};
+        var url=itemUrl+":/content";
+        if(rem.etag) headers["If-Match"]=rem.etag; else url+="?@microsoft.graph.conflictBehavior=fail";
+        return fetch(url,{method:"PUT",headers:headers,body:out}).then(function(r){
+          if((r.status===412||r.status===409) && !intento) return saveMotivos(token,1);   // alguien más guardó: mezclar de nuevo
+          if(!r.ok) throw new Error("Graph HTTP "+r.status);
+          MOT=merged; DIRTY={}; persist(); return rows.length; });
+      });
+    });
+  }
+  $("motSave").addEventListener("click",function(){
+    if(!Object.keys(DIRTY).length) return;
+    motStatus("Guardando en SharePoint…","");
+    getWriteToken().then(function(t){ return saveMotivos(t,0); }).then(function(n){
+      motStatus("✓ Guardado en "+MOT_FILE+" ("+n+" motivos).","ok"); render();
+    }).catch(function(e){
+      var m=(e&&e.message)||String(e), t;
+      if(m==="no-msal") t="Conecta primero con SharePoint (o usa «Descargar Excel» y súbelo a la carpeta).";
+      else if(m.indexOf("consent")!==-1||m.indexOf("AADSTS65001")!==-1||m.indexOf("AADSTS90094")!==-1) t="Falta el permiso Files.ReadWrite.All en la app bat360 (Entra → API permissions → agregar y dar consentimiento). Mientras tanto usa «Descargar Excel».";
+      else if(m.indexOf("Graph HTTP 403")!==-1) t="Tu cuenta no puede escribir en esa carpeta (403). Pide permiso de edición o usa «Descargar Excel».";
+      else if(m.indexOf("popup")!==-1) t="El navegador bloqueó la ventana de permisos. Permite ventanas emergentes e inténtalo de nuevo.";
+      else t="No se pudo guardar: "+m+". Tus motivos siguen en este navegador; puedes usar «Descargar Excel».";
+      motStatus("⚠ "+t,"err");
+    });
+  });
+  // al conectar: traer los motivos ya guardados (lectura; no pide permisos nuevos)
+  function loadMotivosRemote(token){
+    return resolveTarget(token).then(function(base){ return readRemoteMot(token,base); }).then(function(rem){
+      Object.keys(rem.rows).forEach(function(k){ if(!DIRTY[k]) MOT[k]=rem.rows[k]; });
+      persist(); render();
+    }).catch(function(){ /* sin archivo todavía o sin permiso de lectura: se ignora */ });
   }
 
   /* ───────── listado de tiendas (buscador + estado + fotos) ───────── */
@@ -490,7 +622,7 @@ window.COB_REF_Q1 = "2026-10-26";
         var ef = !visited ? '<span class="pill pend">—</span>' : p.efectiva ? '<span class="pill ok">Sí</span>' :
           '<span class="pill crit">No</span>'+(p.motivo?' <span style="font-size:11.5px;color:var(--text-muted)">'+esc(p.motivo)+'</span>':'');
         return '<tr><td class="mono">'+DIAS_T[p.di].slice(0,3)+" "+ymd(p.fecha).slice(5)+'</td><td>'+esc(p.promotor)+'</td><td class="mono">'+esc(p.r.store)+'</td><td>'+esc(p.r.estacion||p.r.store)+
-          '</td><td>'+esc(p.r.distrito)+'</td><td><span class="pill '+e[0]+'">'+e[1]+'</span>'+(visited&&p.ultima?' <span class="mono" style="font-size:11px;color:var(--text-muted)">'+ymd(p.ultima).slice(5)+'</span>':'')+'</td><td>'+ef+'</td><td>'+fotoLinks(p.fotos)+'</td></tr>'; }).join("")+
+          '</td><td>'+esc(p.r.distrito)+'</td><td><span class="pill '+e[0]+'">'+e[1]+'</span>'+(p.estado==="nocub"&&MOT[motKey(p)]?'<div style="font-size:11.5px;color:var(--text-muted);margin-top:3px">Motivo: '+esc(MOT[motKey(p)].motivo)+'</div>':'')+(visited&&p.ultima?' <span class="mono" style="font-size:11px;color:var(--text-muted)">'+ymd(p.ultima).slice(5)+'</span>':'')+'</td><td>'+ef+'</td><td>'+fotoLinks(p.fotos)+'</td></tr>'; }).join("")+
       '</tbody></table>'+(rows.length>MAX?'<div class="empty">Se muestran '+MAX+' de '+rows.length+' tiendas: usa el buscador para acotar.</div>':'');
     reportHeight();
   }
@@ -544,7 +676,7 @@ window.COB_REF_Q1 = "2026-10-26";
   var msPro=msBuild($("msPro"),"Promotor",function(s){ sel.pro=s; render(); });
   var msCad=msBuild($("msCad"),"Cadena",function(s){ sel.cad=s; render(); });
 
-  function refreshControls(){
+  function refreshControls(keepFilters){
     var ws=weeksAvail(), cur=$("fSemana").value;
     $("fSemana").innerHTML=ws.map(function(w){ var m=new Date(w+"T00:00:00"); return '<option value="'+w+'">'+w+' · '+weekQ(m)+'</option>'; }).join("");
     if(cur && ws.indexOf(cur)!==-1) $("fSemana").value=cur;
@@ -554,7 +686,7 @@ window.COB_REF_Q1 = "2026-10-26";
       setRangeFromWeek();
     }
     if(!$("fDesde").value || !$("fHasta").value) setRangeFromWeek();
-    if(PAD){
+    if(PAD && !keepFilters){
       var curV=$("fVig").value;
       $("fVig").innerHTML=PAD.labels.map(function(l,i){ return '<option value="'+i+'">'+esc(l)+'</option>'; }).join("");
       $("fVig").value = curV!=="" && +curV<PAD.labels.length ? curV : String(PAD.labels.length-1);
@@ -565,18 +697,29 @@ window.COB_REF_Q1 = "2026-10-26";
   function setStatus(m,c){ var s=$("statusLine"); s.textContent=m; s.className="status-line"+(c?" "+c:""); }
   function updateNames(){ $("fileName").textContent=[PAD?"Padrón ("+PAD.sheet+")":null, INFO?"Información General":null].filter(Boolean).join(" · ")||"Sin archivos cargados"; }
   function show(){ if(PAD){ $("emptyBanner").hidden=true; $("app").hidden=false; refreshControls(); render(); } }
+  /* "Datos al": hora de modificación de cada archivo + última vez que se revisó */
+  var MOD={pad:null,info:null}, CHK=null;
+  function fmtHM(d){ try{ return new Date(d).toLocaleString("es-PE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}); }catch(e){ return ""; } }
+  function showMod(){
+    var parts=[];
+    if(MOD.info) parts.push("Información General: datos al "+fmtHM(MOD.info));
+    if(MOD.pad) parts.push("Padrón: "+fmtHM(MOD.pad));
+    if(CHK) parts.push("revisado "+new Date(CHK).toLocaleTimeString("es-PE",{hour:"2-digit",minute:"2-digit",hour12:false}));
+    $("modLine").textContent=parts.join(" · ");
+  }
   function applyWb(wb,kind){
     if(kind==="pad"){
       var p=parsePadron(wb); if(p.error){ setStatus("⚠ "+p.error,"err"); return false; }
-      PAD=p; updateNames(); show();
+      PAD=p; MOD.pad=wb.__mod||null; updateNames(); show(); showMod();
       setStatus("✓ Padrón: "+p.rows.length.toLocaleString("es-PE")+" tiendas · columnas "+p.labels.join(", "),"ok"); return true;
     }
     var i=parseInfo(wb); if(i.error){ setStatus("⚠ "+i.error,"err"); return false; }
-    INFO=i; updateNames(); if(PAD){ refreshControls(); render(); }
+    INFO=i; MOD.info=wb.__mod||null; CHK=new Date(); showMod();
+    updateNames(); if(PAD){ refreshControls(true); render(); }
     setStatus("✓ Información General: "+i.visits.length.toLocaleString("es-PE")+" visitas"+(PAD?"":" (falta el padrón)"),"ok"); return true;
   }
   function readFile(file,kind){ setStatus("Leyendo "+file.name+"…");
-    return file.arrayBuffer().then(function(b){ applyWb(XLSX.read(b,{type:"array",cellDates:true}),kind); })
+    return file.arrayBuffer().then(function(b){ var wb=XLSX.read(b,{type:"array",cellDates:true}); wb.__mod=new Date(file.lastModified); applyWb(wb,kind); })
       .catch(function(e){ setStatus("⚠ No se pudo leer el archivo: "+e.message,"err"); }); }
   $("padInput").addEventListener("change",function(e){ if(e.target.files[0]) readFile(e.target.files[0],"pad"); e.target.value=""; });
   $("infoInput").addEventListener("change",function(e){ if(e.target.files[0]) readFile(e.target.files[0],"info"); e.target.value=""; });
@@ -599,9 +742,23 @@ window.COB_REF_Q1 = "2026-10-26";
     return msalApp.loginPopup(req).then(function(r){ if(r.account) $("msUser").textContent=r.account.username; return r.accessToken; });
   }
   function fetchBook(token,url){
-    return fetch("https://graph.microsoft.com/v1.0/shares/u!"+b64url(url)+"/driveItem/content",{headers:{Authorization:"Bearer "+token}})
+    var base="https://graph.microsoft.com/v1.0/shares/u!"+b64url(url)+"/driveItem", opt={headers:{Authorization:"Bearer "+token}};
+    var meta=fetch(base+"?$select=lastModifiedDateTime",opt).then(function(r){ return r.ok?r.json():null; }).catch(function(){ return null; });
+    return fetch(base+"/content",opt)
       .then(function(r){ if(!r.ok) throw new Error("Graph HTTP "+r.status); return r.arrayBuffer(); })
-      .then(function(b){ return XLSX.read(b,{type:"array",cellDates:true}); });
+      .then(function(b){ var wb=XLSX.read(b,{type:"array",cellDates:true});
+        return meta.then(function(m){ if(m && m.lastModifiedDateTime) wb.__mod=new Date(m.lastModifiedDateTime); return wb; }); });
+  }
+  // recarga automática de Información General cada 10 min mientras la pestaña esté visible
+  var autoTimer=null;
+  function startAuto(){
+    if(autoTimer) return;
+    autoTimer=setInterval(function(){
+      if(document.hidden || busy || !msalApp) return;
+      busy=true;
+      msToken(false).then(function(t){ return fetchBook(t,MS.infoUrl).then(function(wb){ applyWb(wb,"info"); return loadMotivosRemote(t); }); })
+        .catch(function(){}).finally(function(){ busy=false; });
+    }, 10*60*1000);
   }
   function msError(err,silent){
     var m=(err&&err.message)||String(err); if(silent&&(m==="no-account"||m==="silent-failed")) return; var t;
@@ -616,8 +773,8 @@ window.COB_REF_Q1 = "2026-10-26";
   function loadLive(silent){
     if(busy) return; busy=true; if(!silent) setStatus("Conectando con SharePoint…");
     msToken(!silent).then(function(token){
-      return fetchBook(token,MS.padUrl).then(function(wb){ if(!applyWb(wb,"pad")) return; $("msRefreshBtn").hidden=false;
-        return fetchBook(token,MS.infoUrl).then(function(wb2){ var base=$("statusLine").textContent; if(applyWb(wb2,"info")) setStatus(base+" · "+$("statusLine").textContent.replace("✓ ",""),"ok"); })
+      return fetchBook(token,MS.padUrl).then(function(wb){ if(!applyWb(wb,"pad")) return; $("msRefreshBtn").hidden=false; startAuto();
+        return fetchBook(token,MS.infoUrl).then(function(wb2){ var base=$("statusLine").textContent; if(applyWb(wb2,"info")) setStatus(base+" · "+$("statusLine").textContent.replace("✓ ",""),"ok"); loadMotivosRemote(token); })
           .catch(function(e){ setStatus($("statusLine").textContent+" · Información General no disponible ("+((e&&e.message)||"error")+"): cárgala manualmente.","ok"); }); });
     }).catch(function(e){ msError(e,silent); }).finally(function(){ busy=false; });
   }
@@ -633,7 +790,7 @@ window.COB_REF_Q1 = "2026-10-26";
     $("msConnectBtn").addEventListener("click",function(){ loadLive(false); });
     $("msRefreshBtn").addEventListener("click",function(){ loadLive(false); });
   }
-  window.__cob={applyWb:applyWb};   // gancho para verificación local
+  window.__cob={applyWb:applyWb, setWriteToken:function(f){ getWriteToken=f; }, setTarget:function(u){ MS.infoUrl=MS.infoUrl||"x"; motTarget=u; }, state:function(){ return {MOT:MOT,DIRTY:DIRTY}; }};   // gancho para verificación local
   initMs();
 
   function reportHeight(){
