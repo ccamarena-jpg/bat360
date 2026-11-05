@@ -181,9 +181,24 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
   </section>
 
   <section class="block">
-    <h2>Detalle de no implementados</h2>
+    <h2>Detalle por tienda y material</h2>
     <p class="sub" id="detSub"></p>
+    <div class="filter-bar" style="margin-bottom:10px">
+      <div class="filter-field"><label for="dEstado">Estado</label>
+        <select id="dEstado"><option value="noimpl">No implementados</option><option value="impl">Implementados</option><option value="">Todos</option></select></div>
+      <div class="filter-field"><label for="dFoto">Foto</label>
+        <select id="dFoto"><option value="">Con o sin foto</option><option value="con">Con foto</option><option value="sin">Sin foto</option></select></div>
+      <div class="filter-field"><label for="dBuscar">Buscar</label><input type="search" id="dBuscar" placeholder="Tienda, código, promotor…" style="min-width:240px"></div>
+      <button class="btn ghost" id="dDown" type="button">⬇ Descargar Excel</button>
+    </div>
     <div class="table-wrap" id="tblDetalle"></div>
+  </section>
+
+  <section class="block">
+    <h2>Implementaciones sin link de foto</h2>
+    <p class="sub">Por material: implementaciones registradas (tienda × visita) que no tienen foto en el query. Sirve para reclamar la evidencia al promotor.</p>
+    <div class="table-wrap" id="tblSinFoto"></div>
+    <div style="margin-top:10px"><button class="btn ghost" id="sfDown" type="button">⬇ Descargar Excel de tiendas sin foto</button></div>
   </section>
 </div>
 
@@ -292,10 +307,14 @@ window.MAT_MS = {
 
     var mats = {}, groups = {};
     head.forEach(function(h,i){
+      // columnas de foto del Excel real: "NOMBRE-IMPLEMENTO-id-7363-FOTO" (guion después de "id", no dos puntos)
+      var mf = /^(.*)-IMPLEMENTO-id[-:](\d+)-FOTO/i.exec(h);
+      if(mf){ var fid=+mf[2]; var fg=groups[fid]||(groups[fid]={impl:-1,coms:[],ops:[],extra:[],fotos:[]}); fg.fotos.push(i); return; }
       var m = /^(.*)-IMPLEMENTO-id:(\d+)(.*)$/i.exec(h); if(!m) return;
       var id = +m[2], suf = m[3] || "";
       if(!mats[id]) mats[id] = { id:id, name:clean(m[1]) };
-      var g = groups[id] || (groups[id] = {impl:-1, coms:[], ops:[], extra:[]});
+      var g = groups[id] || (groups[id] = {impl:-1, coms:[], ops:[], extra:[], fotos:[]});
+      if(!g.fotos) g.fotos=[];
       if(suf==="") g.impl = i;
       else if(/^-comment/i.test(suf)) g.coms.push(i);
       else if(/^-opcion/i.test(suf)) g.ops.push(i);
@@ -325,7 +344,8 @@ window.MAT_MS = {
         var tipo="", com="", foto="";
         for(var a=0;a<g.ops.length && !tipo;a++) tipo = clean(row[g.ops[a]]);
         for(var b=0;b<g.coms.length && !com;b++) com = clean(row[g.coms[b]]);
-        for(var c2=0;c2<g.extra.length && !foto;c2++){ var v=clean(row[g.extra[c2]]); if(/^https?:/i.test(v)) foto=v; }
+        var fcols = (g.fotos||[]).concat(g.extra);
+        for(var c2=0;c2<fcols.length && !foto;c2++){ var v=clean(row[fcols[c2]]); if(/^https?:/i.test(v)) foto=v; }
         var o = Object.assign({}, base); o.mat=id; o.impl=impl; o.tipo=tipo; o.com=com; o.foto=foto;
         recs.push(o);
       }
@@ -453,7 +473,49 @@ window.MAT_MS = {
   }
   function ejemplos(map){ return Object.keys(map).sort(function(a,b){return map[b]-map[a];}).slice(0,2).map(function(t){ return "“"+t+"”"; }).join(" · "); }
 
-  var view = "graf", lastList = [], sortKey = "total", sortDir = -1;
+  var view = "graf", lastList = [], sortKey = "total", sortDir = -1, lastRecs = [];
+
+  /* ───────── detalle por tienda y material (con foto) y apartado "sin foto" ───────── */
+  function detRows(){
+    var est=$("dEstado").value, fo=$("dFoto").value, q=norm($("dBuscar").value);
+    return lastRecs.filter(function(r){
+      if(est==="noimpl" && r.impl!==0) return false;
+      if(est==="impl" && r.impl!==1) return false;
+      if(fo==="con" && !r.foto) return false;
+      if(fo==="sin" && r.foto) return false;
+      if(q && norm([r.store,r.tienda,r.promotor,r.cadena,r.distrito].join(" ")).indexOf(q)===-1) return false;
+      return true;
+    }).sort(function(a,b){ return b.fecha-a.fecha; });
+  }
+  function recExcel(rows){
+    return rows.map(function(r){ return {FECHA:ymd(r.fecha), STORE_ID:r.store, TIENDA:r.tienda, CADENA:r.cadena, ZONA:r.zona, DISTRITO:r.distrito, PROMOTOR:r.promotor,
+      MATERIAL:matLabel(r.mat), ID_MATERIAL:r.mat, ESTADO:r.impl===1?"Implementado":"No implementado", TIPO:r.tipo, MOTIVO:r.com, FOTO:r.foto||"SIN FOTO"}; });
+  }
+  function downloadRows(rows, name){
+    if(!rows.length){ setStatus("No hay filas para descargar con los filtros actuales.","err"); return; }
+    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(recExcel(rows)),"DETALLE"); XLSX.writeFile(wb,name);
+  }
+  function renderDetalle(){
+    var det=detRows(), MAX=500;
+    $("detSub").textContent = det.length.toLocaleString("es-PE")+" registros"+(det.length>MAX?" (se muestran los "+MAX+" más recientes; el Excel baja todos)":"");
+    $("tblDetalle").innerHTML = det.length ? '<table><thead><tr><th>Fecha</th><th>Tienda</th><th>Cadena</th><th>Zona</th><th>Promotor</th><th>Material</th><th>Estado</th><th>Tipo / motivo</th><th>Foto</th></tr></thead><tbody>'+
+      det.slice(0,MAX).map(function(r){
+        var st = r.impl===1 ? '<span class="pill ok">Implementado</span>' : '<span class="pill crit">No impl.</span>';
+        var ft = r.foto ? '<a href="'+esc(r.foto)+'" target="_blank" rel="noopener" title="Abrir foto">📷</a>' : (r.impl===1?'<span class="pill warn">Sin foto</span>':'');
+        return '<tr><td class="mono">'+ymd(r.fecha)+'</td><td>'+esc(r.tienda||r.store)+'</td><td>'+esc(r.cadena)+'</td><td>'+esc(r.zona)+'</td><td>'+esc(r.promotor)+'</td><td>'+esc(matLabel(r.mat))+'</td><td>'+st+'</td><td>'+esc(r.impl===1?(r.tipo||"—"):(r.com||"—"))+'</td><td>'+ft+'</td></tr>'; }).join("")+'</tbody></table>'
+      : '<div class="empty">Sin registros con ese filtro.</div>';
+    reportHeight();
+  }
+  function renderSinFoto(){
+    var by={}; lastRecs.forEach(function(r){ if(r.impl!==1) return; var g=by[r.mat]||(by[r.mat]={n:0,sin:0,stores:{}}); g.n++; if(!r.foto){ g.sin++; g.stores[r.store]=1; } });
+    var ids=Object.keys(by).sort(function(a,b){ return by[b].sin-by[a].sin; });
+    var tot=ids.reduce(function(a,k){ a.n+=by[k].n; a.s+=by[k].sin; return a; },{n:0,s:0});
+    $("tblSinFoto").innerHTML = !ids.length ? '<div class="empty">Sin implementaciones en el periodo.</div>' :
+      '<table><thead><tr><th>Material</th><th class="num">Implementaciones</th><th class="num">Con foto</th><th class="num">Sin foto</th><th class="num">% sin foto</th><th class="num">Tiendas sin foto</th></tr></thead><tbody>'+
+      ids.map(function(k){ var g=by[k]; var p=pct(g.sin,g.n);
+        return '<tr><td>'+esc(matLabel(k))+'</td><td class="num mono">'+g.n+'</td><td class="num mono">'+(g.n-g.sin)+'</td><td class="num mono">'+g.sin+'</td><td class="num mono"><span class="pill '+(p>=30?'crit':p>=10?'warn':'ok')+'">'+p.toFixed(1)+'%</span></td><td class="num mono">'+Object.keys(g.stores).length+'</td></tr>'; }).join("")+
+      '<tr><td><b>Total</b></td><td class="num mono"><b>'+tot.n+'</b></td><td class="num mono"><b>'+(tot.n-tot.s)+'</b></td><td class="num mono"><b>'+tot.s+'</b></td><td class="num mono"><b>'+pct(tot.s,tot.n).toFixed(1)+'%</b></td><td></td></tr></tbody></table>';
+  }
   function applyView(){
     $("pies").hidden = view!=="graf";
     $("tblAvance").hidden = view!=="tabla";
@@ -464,6 +526,7 @@ window.MAT_MS = {
     var rows = lastList.map(function(m){
       var pend = m.meta ? Math.max(0, m.meta-m.total) : 0;
       return { id:m.id, nombre:matLabel(m.id), total:m.total, ok:m.ok, no:m.no, pct:m.total?m.ok/m.total:-1, meta:m.meta, pend:pend, avance:m.meta?m.ok/m.meta:-1,
+        fok:m.fok, fno:m.fno, fpct:(m.fok+m.fno)?m.fok/(m.fok+m.fno):-1,
         tipos:Object.keys(m.tipos).map(function(t){ return t+": "+m.tipos[t]; }).join(" · ") };
     });
     rows.sort(function(a,b){
@@ -471,8 +534,8 @@ window.MAT_MS = {
       if(typeof x==="string") return sortDir*x.localeCompare(y);
       return sortDir*(x-y) || a.nombre.localeCompare(b.nombre);
     });
-    var cols = [["nombre","Material",0],["meta","Universo",1],["total","Visitadas",1],["ok","Implementadas",1],["no","No impl.",1],["pend","Pendientes",1],["avance","Avance vs universo",1],["pct","Efectividad en visitadas",1],["tipos","Tipo de implementación",0]];
-    var tot = rows.reduce(function(a,r){ a.t+=r.total; a.o+=r.ok; a.n+=r.no; a.u+=r.meta; a.p+=r.pend; return a; },{t:0,o:0,n:0,u:0,p:0});
+    var cols = [["nombre","Material",0],["meta","Universo",1],["total","Visitadas",1],["ok","Implementadas",1],["no","No impl.",1],["pend","Pendientes",1],["avance","Avance vs universo",1],["pct","Efectividad en visitadas",1],["fpct","📷 Con foto",1],["tipos","Tipo de implementación",0]];
+    var tot = rows.reduce(function(a,r){ a.t+=r.total; a.o+=r.ok; a.n+=r.no; a.u+=r.meta; a.p+=r.pend; a.fo+=r.fok; a.fn+=r.fno; return a; },{t:0,o:0,n:0,u:0,p:0,fo:0,fn:0});
     $("tblAvance").innerHTML = !rows.length ? '<div class="empty">No hay registros con los filtros actuales.</div>' :
       '<table><thead><tr>'+cols.map(function(c){
         return '<th class="sortable'+(c[2]?' num':'')+'" data-k="'+c[0]+'">'+c[1]+(sortKey===c[0]?(sortDir<0?" ▾":" ▴"):"")+'</th>'; }).join("")+'</tr></thead><tbody>'+
@@ -481,9 +544,9 @@ window.MAT_MS = {
         var av = r.avance<0 ? "—" : (r.avance*100).toFixed(1)+"%";
         return '<tr><td>'+esc(r.nombre)+'</td><td class="num mono">'+(r.meta||"—")+'</td><td class="num mono">'+r.total+'</td><td class="num mono">'+r.ok+'</td><td class="num mono">'+r.no+
           '</td><td class="num mono">'+(r.meta?r.pend:"—")+'</td><td class="num mono">'+(r.avance<0?"":'<span class="bar" style="width:'+Math.round(r.avance*60)+'px"></span>')+av+
-          '</td><td class="num mono">'+p+'</td><td>'+esc(r.tipos||"—")+'</td></tr>'; }).join("")+
+          '</td><td class="num mono">'+p+'</td><td class="num mono" title="Implementaciones con link de foto / total de implementaciones">'+(r.fpct<0?"—":(r.fpct*100).toFixed(0)+'% <span style="color:var(--text-muted);font-size:11px">'+r.fok+'/'+(r.fok+r.fno)+'</span>')+'</td><td>'+esc(r.tipos||"—")+'</td></tr>'; }).join("")+
       '<tr><td><b>Total</b></td><td class="num mono"><b>'+tot.u+'</b></td><td class="num mono"><b>'+tot.t+'</b></td><td class="num mono"><b>'+tot.o+'</b></td><td class="num mono"><b>'+tot.n+
-      '</b></td><td class="num mono"><b>'+tot.p+'</b></td><td class="num mono"><b>'+(tot.u?pct(tot.o,tot.u).toFixed(1)+"%":"—")+'</b></td><td class="num mono"><b>'+(tot.t?pct(tot.o,tot.t).toFixed(1)+"%":"—")+'</b></td><td></td></tr></tbody></table>';
+      '</b></td><td class="num mono"><b>'+tot.p+'</b></td><td class="num mono"><b>'+(tot.u?pct(tot.o,tot.u).toFixed(1)+"%":"—")+'</b></td><td class="num mono"><b>'+(tot.t?pct(tot.o,tot.t).toFixed(1)+"%":"—")+'</b></td><td class="num mono"><b>'+((tot.fo+tot.fn)?Math.round(tot.fo*100/(tot.fo+tot.fn))+"%":"—")+'</b></td><td></td></tr></tbody></table>';
     [].forEach.call($("tblAvance").querySelectorAll("th.sortable"), function(th){
       th.addEventListener("click", function(){
         var k=th.getAttribute("data-k"); if(sortKey===k) sortDir=-sortDir; else { sortKey=k; sortDir = (k==="nombre"||k==="tipos")?1:-1; }
@@ -497,9 +560,9 @@ window.MAT_MS = {
     var f = filtered(), recs = f.recs;
     var byMat = {};
     recs.forEach(function(r){
-      var m = byMat[r.mat] || (byMat[r.mat] = {id:r.mat, stores:{}, tipos:{}});
+      var m = byMat[r.mat] || (byMat[r.mat] = {id:r.mat, stores:{}, tipos:{}, fok:0, fno:0});
       var s = m.stores[r.store] || (m.stores[r.store] = {impl:false});
-      if(r.impl===1){ s.impl=true; var t=r.tipo||"Sin tipo"; m.tipos[t]=(m.tipos[t]||0)+1; }
+      if(r.impl===1){ s.impl=true; var t=r.tipo||"Sin tipo"; m.tipos[t]=(m.tipos[t]||0)+1; if(r.foto) m.fok++; else m.fno++; }
     });
     var mesKey = $("fMes").value, cfgMes = CFG.meses && CFG.meses[mesKey];
     var metaOf = {}; if(cfgMes && cfgMes.materiales) cfgMes.materiales.forEach(function(m){ if(m.meta) metaOf[+m.id]=+m.meta; });
@@ -512,7 +575,7 @@ window.MAT_MS = {
     var list = Object.keys(byMat).map(function(k){
       var m=byMat[k], st=Object.keys(m.stores), ok=st.filter(function(s){return m.stores[s].impl;}).length;
       var cfgMeta = (!filtrado && metaOf[m.id]) ? metaOf[m.id] : 0;
-      return {id:m.id, total:st.length, ok:ok, no:st.length-ok, tipos:m.tipos, meta:cfgMeta||universo, metaEst:!cfgMeta};
+      return {id:m.id, total:st.length, ok:ok, no:st.length-ok, tipos:m.tipos, meta:cfgMeta||universo, metaEst:!cfgMeta, fok:m.fok||0, fno:m.fno||0};
     }).sort(function(a,b){ return b.total-a.total || matLabel(a.id).localeCompare(matLabel(b.id)); });
 
     var storesAll = {}, vis = {}, pairs=0, pairsOk=0;
@@ -576,12 +639,9 @@ window.MAT_MS = {
       $("tblCobertura").innerHTML = '<div class="empty">Carga el Excel <b>582-INFORMACIÓN GENERAL</b> (botón de arriba o conexión con SharePoint) para ver los motivos de no cobertura.</div>';
     }
 
-    var det = noImpl.slice().sort(function(a,b){ return b.fecha-a.fecha; });
-    $("detSub").textContent = det.length + " registros" + (det.length>400 ? " (se muestran los 400 más recientes)" : "");
-    $("tblDetalle").innerHTML = det.length ? '<table><thead><tr><th>Fecha</th><th>Tienda</th><th>Cadena</th><th>Zona</th><th>Promotor</th><th>Material</th><th>Motivo</th><th>Foto</th></tr></thead><tbody>'+
-      det.slice(0,400).map(function(r){
-        return '<tr><td class="mono">'+ymd(r.fecha)+'</td><td>'+esc(r.tienda||r.store)+'</td><td>'+esc(r.cadena)+'</td><td>'+esc(r.zona)+'</td><td>'+esc(r.promotor)+'</td><td>'+esc(matLabel(r.mat))+'</td><td>'+esc(r.com||"—")+'</td><td>'+(r.foto?'<a href="'+esc(r.foto)+'" target="_blank" rel="noopener">📷</a>':"")+'</td></tr>';
-      }).join("")+'</tbody></table>' : '<div class="empty">Sin no implementados en el periodo.</div>';
+    lastRecs = recs;
+    renderDetalle();
+    renderSinFoto();
 
     var scopeTxt = f.scope ? "Mostrando los "+f.scope.size+" materiales configurados para "+mesLabel(mesKey)+"." :
       (mesKey && $("fAlcance").value==="mes" ? "No hay materiales configurados para "+mesLabel(mesKey)+" en config/materiales.json: se muestran todos los que tienen registros." : "Mostrando todos los materiales.");
@@ -719,6 +779,12 @@ window.MAT_MS = {
   /* ───────── arranque ───────── */
   msMat = msBuild($("msMat"),"Material", function(s){ sel.mat=s; render(); });
   msCad = msBuild($("msCad"),"Cadena", function(s){ sel.cad=s; render(); });
+  ["dEstado","dFoto"].forEach(function(id){ $(id).addEventListener("change", renderDetalle); });
+  $("dBuscar").addEventListener("input", renderDetalle);
+  $("dDown").addEventListener("click", function(){ downloadRows(detRows(), "materiales-detalle.xlsx"); });
+  $("sfDown").addEventListener("click", function(){
+    downloadRows(lastRecs.filter(function(r){ return r.impl===1 && !r.foto; }).sort(function(a,b){ return b.fecha-a.fecha; }), "materiales-sin-foto.xlsx");
+  });
   $("viewSeg").addEventListener("click", function(e){
     var b = e.target.closest("button[data-v]"); if(!b) return;
     view = b.getAttribute("data-v"); applyView();

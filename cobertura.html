@@ -58,6 +58,19 @@ input[type=file]{display:none;}
 .filter-field select{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px;
   border:1px solid var(--border); background:var(--bg); color:var(--text); min-width:150px;}
 .filter-field input[type=search]{font-family:inherit; font-size:13px; padding:7px 10px; border-radius:8px; border:1px solid var(--border); background:var(--bg); color:var(--text);}
+details.defs{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 14px; margin-bottom:10px; font-size:12.5px;}
+details.defs summary{cursor:pointer; font-weight:600; color:var(--accent);}
+details.defs ul{margin:8px 0; padding-left:18px; line-height:1.55;}
+.alerta{display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; background:var(--warn-bg); color:var(--text); border:1px solid var(--warn); border-radius:10px; padding:10px 14px; margin-bottom:10px; font-size:13px;}
+.alerta button{font-family:inherit; font-size:12.5px; font-weight:600; border:1px solid var(--warn); background:transparent; color:var(--warn); border-radius:8px; padding:5px 10px; cursor:pointer;}
+a.cnt{color:var(--accent); text-decoration:underline dotted; cursor:pointer;}
+a.cnt:hover{text-decoration:underline;}
+.kpi[data-k]{cursor:pointer;} .kpi[data-k]:hover{border-color:var(--accent);}
+.modal{position:fixed; inset:0; z-index:100; background:rgba(15,25,45,.55); display:flex; align-items:center; justify-content:center; padding:16px;}
+.modal-box{background:var(--surface); border-radius:14px; box-shadow:var(--shadow); width:min(1100px,100%); max-height:90vh; display:flex; flex-direction:column; overflow:hidden;}
+.modal-head{display:flex; gap:12px; justify-content:space-between; align-items:flex-start; padding:14px 18px; border-bottom:1px solid var(--border);}
+.modal-head h3{font-size:16px;} .modal-sub{font-size:12.5px; color:var(--text-muted); margin-top:2px;}
+.modal-actions{display:flex; gap:8px; flex-shrink:0;}
 .mot-bar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:6px;}
 input.motivo{font-family:inherit; font-size:12.5px; padding:6px 8px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text); width:100%; min-width:240px;}
 input.motivo.dirty{border-color:var(--warn); background:var(--warn-bg);}
@@ -159,7 +172,20 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
     <div class="kpi-strip" id="kpis"></div>
     <section class="block">
       <h2>Cobertura por promotor</h2>
-      <p class="sub"><b>Programadas</b> = tiendas que le tocan esa semana según el padrón (día y frecuencia). <b>Vencidas</b> = las de días anteriores a hoy. <b>Cubierta</b> = hubo visita a la tienda dentro del rango elegido (mismo día o en otro; sábados y domingos incluidos). <b>Cobertura al día</b> = cubiertas ÷ vencidas (solo lo que ya debió hacerse). <b>Avance semana</b> = cubiertas ÷ programadas (todo lo de la semana). Hoy y los días siguientes cuentan como pendientes.</p>
+      <details class="defs" open>
+        <summary>¿Qué significa cada columna?</summary>
+        <ul>
+          <li><b>Programadas</b>: tiendas que le tocan según el padrón (día y frecuencia Q1/Q2) dentro del rango.</li>
+          <li><b>Vencidas</b>: programadas cuyo día <u>ya pasó</u> (anterior a hoy). Hoy y los días siguientes son <b>pendientes</b>, todavía no se pueden juzgar.</li>
+          <li><b>Cubiertas</b>: vencidas con al menos una visita registrada en Información General dentro del rango (sábados y domingos incluidos).</li>
+          <li><b>No cubiertas</b>: vencidas <u>sin ninguna visita</u>. No es lo mismo que «vencidas»: <b>vencidas = cubiertas + no cubiertas</b>.</li>
+          <li><b>En otro día</b>: cubiertas, pero la visita no fue el día programado (se adelantó o se atrasó). Cuenta como cubierta; haz clic en el número para ver cuándo se visitó.</li>
+          <li><b>Efectivas</b>: cubiertas donde el local estaba abierto y permitió la auditoría en counter.</li>
+          <li><b>Críticas</b>: no cubiertas y sin ninguna visita registrada en los 14 días previos a su día programado.</li>
+        </ul>
+        <div style="font-size:12px;color:var(--text-muted)"><b>Cobertura al día</b> = cubiertas ÷ vencidas · <b>Avance semana</b> = cubiertas ÷ programadas. Haz clic en cualquier número para ver las tiendas.</div>
+      </details>
+      <div id="alertaOtro"></div>
       <div class="table-wrap" id="tblPromotor"></div>
     </section>
     <section class="block">
@@ -173,6 +199,7 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
       <div class="mot-bar">
         <button class="btn" id="motSave" type="button">💾 Guardar motivos</button>
         <button class="btn ghost" id="motDown" type="button">⬇ Descargar Excel</button>
+        <button class="btn ghost" id="critDown" type="button" title="Tiendas no cubiertas, con las críticas marcadas">⬇ Excel de no visitadas (críticas)</button>
         <span class="status-line" id="motStatus"></span>
       </div>
       <p class="sub" style="margin-top:6px">Escribe el motivo de cada tienda no cubierta (o elige uno de la lista). Se guardan en <code>582-MOTIVOS-NO-COBERTURA.xlsx</code>, en la misma carpeta de SharePoint que Información General (hoja <code>MOTIVOS</code>), y se vuelven a mostrar aquí.</p>
@@ -205,6 +232,16 @@ footer{font-size:12px; color:var(--text-muted); border-top:1px solid var(--borde
 </div>
 
 <footer>Los archivos se leen en tu navegador con tu cuenta de Microsoft; no se guardan en la plataforma.</footer>
+
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><h3 id="modalTitle"></h3><div class="modal-sub" id="modalSub"></div></div>
+      <div class="modal-actions"><button class="btn ghost" id="modalDown" type="button">⬇ Excel</button><button class="btn" id="modalClose" type="button" aria-label="Cerrar">✕</button></div>
+    </div>
+    <div class="table-wrap" id="modalBody" style="border:none;box-shadow:none;max-height:60vh"></div>
+  </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3/lib/msal-browser.min.js"></script>
 <script>
@@ -421,13 +458,22 @@ window.COB_REF_Q1 = "2026-10-26";
       } else {
         // hoy todavía puede visitarse: cuenta como pendiente, no como no cubierta
         p.estado = p.fecha>=today ? "pend" : "nocub";
+        if(p.estado==="nocub"){
+          // crítica = sin ninguna visita registrada en los CRIT_DIAS previos a su día programado
+          var prev=(INFO && INFO.byStore[p.r.store] || []).filter(function(v){ return v.fecha<p.fecha; })
+            .reduce(function(a,v){ return (!a||v.fecha>a)? v.fecha : a; }, null);
+          p.ultimaPrevia=prev; p.dias=prev? Math.round((p.fecha-prev)/864e5) : null;
+          p.critica = !prev || p.dias>=CRIT_DIAS;
+        }
       }
     });
     return prog;
   }
 
   /* ───────── render ───────── */
-  function kpi(l,v,s){ return '<div class="kpi"><div class="k-label">'+esc(l)+'</div><div class="k-value mono">'+esc(v)+'</div><div class="k-sub">'+esc(s)+'</div></div>'; }
+  var CRIT_DIAS=14;
+  function kpi(l,v,s,key){ return '<div class="kpi"'+(key?' data-k="'+key+'" title="Clic para ver las tiendas"':'')+'><div class="k-label">'+esc(l)+'</div><div class="k-value mono">'+esc(v)+'</div><div class="k-sub">'+esc(s)+'</div></div>'; }
+  function cnt(promotor,key,n){ return n? '<a class="cnt" data-p="'+esc(promotor)+'" data-k="'+key+'">'+n+'</a>' : String(n); }
   function semaforo(p){ return p>=90?"ok":p>=70?"warn":"crit"; }
   function render(){
     if(!PAD) return;
@@ -444,20 +490,26 @@ window.COB_REF_Q1 = "2026-10-26";
     var vencidas=prog.filter(function(p){return p.estado!=="pend";}), cub=vencidas.filter(function(p){return p.estado!=="nocub";});
     var efect=cub.filter(function(p){return p.efectiva;}), pend=prog.length-vencidas.length;
     $("kpis").innerHTML =
-      kpi("Programadas", prog.length.toLocaleString("es-PE"), "tiendas que tocan esta semana") +
-      kpi("Cobertura", vencidas.length? pct(cub.length,vencidas.length).toFixed(1)+"%":"—", cub.length+" de "+vencidas.length+" vencidas") +
-      kpi("Efectividad", cub.length? pct(efect.length,cub.length).toFixed(1)+"%":"—", efect.length+" de "+cub.length+" visitas con local abierto") +
-      kpi("No cubiertas", (vencidas.length-cub.length).toLocaleString("es-PE"), "sin visita registrada") +
-      kpi("Pendientes", pend.toLocaleString("es-PE"), "de hoy y días siguientes");
+      kpi("Programadas", prog.length.toLocaleString("es-PE"), "tiendas que tocan en el rango","n") +
+      kpi("Cobertura", vencidas.length? pct(cub.length,vencidas.length).toFixed(1)+"%":"—", cub.length+" de "+vencidas.length+" vencidas","c") +
+      kpi("Efectividad", cub.length? pct(efect.length,cub.length).toFixed(1)+"%":"—", efect.length+" de "+cub.length+" visitas con local abierto","ef") +
+      kpi("No cubiertas", (vencidas.length-cub.length).toLocaleString("es-PE"), "vencidas sin visita registrada","nc") +
+      kpi("Críticas", prog.filter(function(p){return p.critica;}).length.toLocaleString("es-PE"), "no cubiertas y sin visita en "+CRIT_DIAS+" días","crit") +
+      kpi("Pendientes", pend.toLocaleString("es-PE"), "de hoy y días siguientes","pend");
+
+    // alerta: tiendas con información subida en otro día distinto al programado
+    var otros=prog.filter(function(p){ return p.estado==="otro"; });
+    var adel=otros.filter(function(p){ return visitaDif(p)<0; }).length;
+    $("alertaOtro").innerHTML = otros.length ? '<div class="alerta"><span>⚠️ <b>'+otros.length+' tienda(s) subieron información en otro día</b> distinto al programado ('+adel+' adelantadas, '+(otros.length-adel)+' atrasadas). Cuentan como cubiertas, pero conviene revisar si es un cambio de ruta.</span><button type="button" data-open="otro">Ver detalle</button></div>' : "";
 
     var byP={};
-    prog.forEach(function(p){ var g=byP[p.promotor]||(byP[p.promotor]={n:0,v:0,c:0,e:0,otro:0,pend:0}); g.n++;
+    prog.forEach(function(p){ var g=byP[p.promotor]||(byP[p.promotor]={n:0,v:0,c:0,e:0,otro:0,pend:0,crit:0}); g.n++; if(p.critica) g.crit++;
       if(p.estado==="pend") g.pend++; else { g.v++; if(p.estado!=="nocub"){ g.c++; if(p.estado==="otro") g.otro++; if(p.efectiva) g.e++; } } });
     var pk=Object.keys(byP).sort(function(a,b){ return pct(byP[a].c,byP[a].v)-pct(byP[b].c,byP[b].v) || a.localeCompare(b); });
     $("tblPromotor").innerHTML = !pk.length? '<div class="empty">No hay tiendas programadas con los filtros actuales.</div>' :
-      '<table><thead><tr><th>Promotor</th><th class="num">Programadas</th><th class="num">Vencidas</th><th class="num">Cubiertas</th><th class="num">No cubiertas</th><th class="num">En otro día</th><th class="num">Efectivas</th><th class="num">Pendientes</th><th>Cobertura al día</th><th>Avance semana</th></tr></thead><tbody>'+
+      '<table><thead><tr><th>Promotor</th><th class="num">Programadas</th><th class="num">Vencidas</th><th class="num">Cubiertas</th><th class="num">No cubiertas</th><th class="num">En otro día</th><th class="num">Efectivas</th><th class="num">Críticas</th><th class="num">Pendientes</th><th>Cobertura al día</th><th>Avance semana</th></tr></thead><tbody>'+
       pk.map(function(k){ var g=byP[k], c=pct(g.c,g.v), av=pct(g.c,g.n);
-        return '<tr><td>'+esc(k)+'</td><td class="num mono">'+g.n+'</td><td class="num mono">'+g.v+'</td><td class="num mono">'+g.c+'</td><td class="num mono">'+(g.v-g.c)+'</td><td class="num mono">'+g.otro+'</td><td class="num mono">'+g.e+'</td><td class="num mono">'+g.pend+'</td><td>'+(g.v?'<span class="pill '+semaforo(c)+'">'+c.toFixed(1)+'%</span> <span class="mono" style="font-size:11.5px;color:var(--text-muted)">'+g.c+'/'+g.v+'</span>':'<span class="pill pend" title="Aún no vence ninguna tienda">—</span>')+'</td><td><span class="bar" style="width:'+Math.round(av*0.6)+'px;background:var(--accent)"></span><span class="mono">'+av.toFixed(1)+'%</span> <span class="mono" style="font-size:11.5px;color:var(--text-muted)">'+g.c+'/'+g.n+'</span></td></tr>'; }).join("")+'</tbody></table>';
+        return '<tr><td>'+esc(k)+'</td><td class="num mono">'+cnt(k,"n",g.n)+'</td><td class="num mono">'+cnt(k,"v",g.v)+'</td><td class="num mono">'+cnt(k,"c",g.c)+'</td><td class="num mono">'+cnt(k,"nc",g.v-g.c)+'</td><td class="num mono">'+cnt(k,"otro",g.otro)+'</td><td class="num mono">'+cnt(k,"ef",g.e)+'</td><td class="num mono">'+cnt(k,"crit",g.crit)+'</td><td class="num mono">'+cnt(k,"pend",g.pend)+'</td><td>'+(g.v?'<span class="pill '+semaforo(c)+'">'+c.toFixed(1)+'%</span> <span class="mono" style="font-size:11.5px;color:var(--text-muted)">'+g.c+'/'+g.v+'</span>':'<span class="pill pend" title="Aún no vence ninguna tienda">—</span>')+'</td><td><span class="bar" style="width:'+Math.round(av*0.6)+'px;background:var(--accent)"></span><span class="mono">'+av.toFixed(1)+'%</span> <span class="mono" style="font-size:11.5px;color:var(--text-muted)">'+g.c+'/'+g.n+'</span></td></tr>'; }).join("")+'</tbody></table>';
 
     var noEf=cub.filter(function(p){return !p.efectiva;}), gm={};
     noEf.forEach(function(p){ var c=categoria(p.motivo), g=gm[c]||(gm[c]={n:0,ej:{}}); g.n++; if(p.motivo) g.ej[p.motivo]=(g.ej[p.motivo]||0)+1; });
@@ -594,6 +646,76 @@ window.COB_REF_Q1 = "2026-10-26";
       persist(); render();
     }).catch(function(){ /* sin archivo todavía o sin permiso de lectura: se ignora */ });
   }
+
+  /* ───────── ventana emergente con el detalle de tiendas + Excel ───────── */
+  var ESTADO_TXT={mismo:"Cubierta (mismo día)",otro:"Cubierta (otro día)",nocub:"No cubierta",pend:"Pendiente"};
+  var PICK={
+    n:function(p){return true;}, v:function(p){return p.estado!=="pend";}, c:function(p){return p.estado==="mismo"||p.estado==="otro";},
+    nc:function(p){return p.estado==="nocub";}, otro:function(p){return p.estado==="otro";}, ef:function(p){return !!p.efectiva;},
+    crit:function(p){return !!p.critica;}, pend:function(p){return p.estado==="pend";}
+  };
+  var PICK_TXT={n:"Programadas",v:"Vencidas (día ya pasado)",c:"Cubiertas",nc:"No cubiertas",otro:"Cubiertas en otro día",ef:"Visitas efectivas",crit:"Críticas (sin visita en "+CRIT_DIAS+" días)",pend:"Pendientes (hoy y días siguientes)"};
+  var modalItems=[], modalName="detalle";
+  function visitaDif(p){   // días entre la visita más cercana y el día programado (<0 = adelantada, >0 = atrasada)
+    if(!p.visitas||!p.visitas.length) return 0;
+    var best=null; p.visitas.forEach(function(v){ var d=Math.round((v.fecha-p.fecha)/864e5); if(best===null||Math.abs(d)<Math.abs(best)) best=d; });
+    return best;
+  }
+  function visitaTxt(p){
+    if(!p.visitas||!p.visitas.length) return "";
+    return p.visitas.slice().sort(function(a,b){return a.fecha-b.fecha;}).map(function(v){ return ymd(v.fecha).slice(5)+(v.promotor?" ("+v.promotor+")":""); }).join(", ");
+  }
+  function difTxt(p){ var d=visitaDif(p); return p.estado!=="otro"? "" : (d<0? "adelantada "+(-d)+" día(s)" : "atrasada "+d+" día(s)"); }
+  function openDetalle(key, promotor){
+    var items=lastProg.filter(PICK[key]).filter(function(p){ return !promotor || p.promotor===promotor; })
+      .sort(function(a,b){ return a.fecha-b.fecha || a.promotor.localeCompare(b.promotor) || (a.r.estacion||"").localeCompare(b.r.estacion||""); });
+    modalItems=items; modalName="cobertura-"+key+(promotor?"-"+promotor.replace(/\s+/g,"_"):"");
+    $("modalTitle").textContent=PICK_TXT[key]+(promotor?" · "+promotor:"");
+    $("modalSub").textContent=items.length+" tienda(s)"+(key==="otro"?" · «Otro día» = la tienda sí se visitó en el rango, pero no el día que le tocaba":"")+(key==="v"?" · vencidas = cubiertas + no cubiertas":"");
+    var MAXM=400, otro=key==="otro";
+    $("modalBody").innerHTML=!items.length? '<div class="empty">Sin tiendas.</div>' :
+      '<table><thead><tr><th>Día prog.</th><th>Promotor</th><th>Código</th><th>Tienda</th><th>Distrito</th><th>Estado</th><th>'+(otro?"Visita registrada · quién":"Visita")+'</th>'+(otro?'<th>Diferencia</th>':'<th>Efectiva</th>')+'<th>Foto</th></tr></thead><tbody>'+
+      items.slice(0,MAXM).map(function(p){
+        var e=ESTADO_TXT[p.estado], cls=p.estado==="nocub"?"crit":p.estado==="pend"?"pend":p.estado==="otro"?"warn":"ok";
+        var ef=!(p.visitas&&p.visitas.length)? '<span class="pill pend">—</span>' : p.efectiva? '<span class="pill ok">Sí</span>' : '<span class="pill crit">No</span>'+(p.motivo?' <span style="font-size:11.5px;color:var(--text-muted)">'+esc(p.motivo)+'</span>':'');
+        var extra = otro? '<td>'+esc(difTxt(p))+'</td>' : '<td>'+ef+'</td>';
+        var vis = p.estado==="nocub" ? (p.critica? '<span class="pill crit">Crítica</span> ':'')+(p.ultimaPrevia? 'última visita '+ymd(p.ultimaPrevia)+' ('+p.dias+' d)':'sin visitas previas') : esc(visitaTxt(p));
+        return '<tr><td class="mono">'+DIAS_T[p.di].slice(0,3)+" "+ymd(p.fecha).slice(5)+'</td><td>'+esc(p.promotor)+'</td><td class="mono">'+esc(p.r.store)+'</td><td>'+esc(p.r.estacion||p.r.store)+'</td><td>'+esc(p.r.distrito)+
+          '</td><td><span class="pill '+cls+'">'+e+'</span></td><td>'+vis+'</td>'+extra+'<td>'+fotoLinks(p.fotos)+'</td></tr>'; }).join("")+'</tbody></table>'+
+      (items.length>MAXM?'<div class="empty">Se muestran '+MAXM+' de '+items.length+'. El Excel baja todas.</div>':'');
+    $("modal").hidden=false; document.body.style.overflow="hidden";
+  }
+  function closeModal(){ $("modal").hidden=true; document.body.style.overflow=""; }
+  function itemsExcel(items){
+    return items.map(function(p){
+      var vs=(p.visitas||[]).slice().sort(function(a,b){return a.fecha-b.fecha;});
+      return { PROMOTOR:p.promotor, STORE_ID:p.r.store, TIENDA:p.r.estacion, CADENA:p.r.cadena, DISTRITO:p.r.distrito, ZONA:p.r.zona, "DÍA PROGRAMADO":DIAS_T[p.di], "FECHA PROGRAMADA":ymd(p.fecha), FRECUENCIA:p.frec,
+        ESTADO:ESTADO_TXT[p.estado], "FECHA(S) DE VISITA":vs.map(function(v){return ymd(v.fecha);}).join(", "), "QUIÉN VISITÓ":vs.map(function(v){return v.promotor;}).filter(Boolean).join(", "),
+        DIFERENCIA:difTxt(p), EFECTIVA:(vs.length? (p.efectiva?"SÍ":"NO") : ""), "MOTIVO NO EFECTIVA":p.motivo||"",
+        "ÚLTIMA VISITA PREVIA":p.ultimaPrevia?ymd(p.ultimaPrevia):(p.estado==="nocub"?"nunca":""), "DÍAS SIN VISITA":p.dias==null?"":p.dias, "CRÍTICA":p.estado==="nocub"?(p.critica?"SÍ":"NO"):"",
+        "MOTIVO NO COBERTURA":(MOT[motKey(p)]||{}).motivo||"", "FOTO COUNTER":(p.fotos&&p.fotos.counter)||"" };
+    });
+  }
+  function downloadItems(items,name,sheet){
+    if(!items.length){ motStatus("No hay tiendas para descargar con los filtros actuales.","err"); return; }
+    var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(itemsExcel(items)),sheet||"TIENDAS"); XLSX.writeFile(wb,name);
+  }
+  $("modalClose").addEventListener("click",closeModal);
+  $("modal").addEventListener("click",function(e){ if(e.target===$("modal")) closeModal(); });
+  document.addEventListener("keydown",function(e){ if(e.key==="Escape" && !$("modal").hidden) closeModal(); });
+  $("modalDown").addEventListener("click",function(){ downloadItems(modalItems, modalName+".xlsx", "DETALLE"); });
+  $("critDown").addEventListener("click",function(){
+    // todas las no cubiertas del rango; las críticas primero
+    var items=lastProg.filter(PICK.nc).sort(function(a,b){ return (b.critica?1:0)-(a.critica?1:0) || (b.dias==null?1e9:b.dias)-(a.dias==null?1e9:a.dias) || a.promotor.localeCompare(b.promotor); });
+    downloadItems(items,"tiendas-no-visitadas-criticas.xlsx","NO VISITADAS");
+    if(items.length) motStatus("Descargado: "+items.length+" no cubiertas ("+items.filter(function(p){return p.critica;}).length+" críticas).","ok");
+  });
+  // clic en cualquier número de la tabla o en las tarjetas → detalle
+  document.addEventListener("click",function(e){
+    var a=e.target.closest("a.cnt"); if(a){ openDetalle(a.getAttribute("data-k"), a.getAttribute("data-p")); return; }
+    var k=e.target.closest(".kpi[data-k]"); if(k){ openDetalle(k.getAttribute("data-k"), ""); return; }
+    var b=e.target.closest("button[data-open]"); if(b){ openDetalle(b.getAttribute("data-open"), ""); }
+  });
 
   /* ───────── listado de tiendas (buscador + estado + fotos) ───────── */
   var lastProg = [];
